@@ -35,3 +35,14 @@ bar_digest.py
 gate_report.py
 research/
 web/
+trading_memory.json
+trade_journal.py
+research/
+web/
+deploy/
+bar_digest.py
+gate_report.py
+muse_consult.py
+auto_pilot_trader_v11.py
+stop_watchdog.service
+tg_notify.py
