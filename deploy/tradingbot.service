@@ -1,0 +1,17 @@
+[Unit]
+Description=Binance Futures AI Grid Bot + Web Dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/latihan
+ExecStart=/home/pi/latihan/venv/bin/python -m uvicorn src.web_server:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+# .env is loaded into the process environment by the app itself (python-dotenv),
+# so AUTO_START_BOT / TRADING_MODE / AI_* all take effect without EnvironmentFile.
+
+[Install]
+WantedBy=multi-user.target
