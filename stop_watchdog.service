@@ -1,0 +1,22 @@
+[Unit]
+Description=External Stop/Position Watchdog (naked-position alarm)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/latihan
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+# NOTE: this watchdog only READS positions + conditional orders and alerts.
+# It never calls set_protective_stop / any order endpoint — it is deliberately
+# incapable of placing a trade. If a naked position is found it raises an alarm
+# (journal + optional Telegram); fixing it stays a human decision.
+ExecStart=/home/pi/latihan/venv/bin/python -m src.stop_watchdog --interval 120
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

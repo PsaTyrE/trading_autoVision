@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Binance Futures AI Grid Bot Dashboard</title>
+  <meta name="description" content="Real-time Web Dashboard for Binance Futures AI Long-Grid Trading Bot. Monitor profit, ladder orders, and execute 24/7 trading.">
+  <link rel="stylesheet" href="/static/styles.css?v=3.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header>
+    <div class="header-container">
+      <div class="logo-group">
+        <span class="logo-badge">BINANCE FUTURES</span>
+        <h1 class="logo-title">AI Long-Grid Hub</h1>
+      </div>
+
+      <div class="header-status-group">
+        <div id="news-status-pill" class="status-pill" title="Forex Factory Macro News Sentinel">
+          <span id="news-status-icon">📰</span>
+          <span id="news-status-text">Forex Factory: Memuat...</span>
+        </div>
+
+        <div id="memory-status-pill" class="status-pill" title="Self-Learning Episodic Memory: Evaluasi pola stop-loss & adaptasi dinamis">
+          <span id="memory-status-icon">🧠</span>
+          <span id="memory-status-text">Memory: Memuat...</span>
+        </div>
+
+        <div id="discipline-pill" class="status-pill running" title="Disiplin Otomatis: Batas Transaksi Harian & Max Loss 5%">
+          <span id="discipline-icon">📈</span>
+          <span id="discipline-text">Disiplin: 0/30 (Aman)</span>
+        </div>
+
+        <div id="bot-status-pill" class="status-pill stopped">
+          <span class="status-dot"></span>
+          <span id="bot-status-text">OFFLINE</span>
+        </div>
+
+        <div class="wallet-badge mono">
+          <span>Tersedia</span>
+          <span id="header-wallet-available" class="profit-green">$--.--</span>
+          <span id="header-wallet-quote">USDT</span>
+          <span style="color: var(--text-dim);" title="Total Saldo Akun">Total: <span id="header-wallet-total">$--.--</span></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main>
+
+    <!-- Top Key Metrics Cards -->
+    <section class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">
+          <span>Instrumen</span>
+          <span id="card-mode-badge" class="ladder-badge badge-sell">LIVE</span>
+        </div>
+        <div id="card-symbol" class="metric-value price-cyan mono">-- / USDT</div>
+        <div id="card-current-price" class="metric-sub mono">Price: $0.00000</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">
+          <span>Realized Profit</span>
+        </div>
+        <div id="card-profit" class="metric-value profit-green mono">+$0.00 USDT</div>
+        <div id="card-matched-trades" class="metric-sub mono">0 Matched Trades</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">
+          <span>Unrealized PnL</span>
+        </div>
+        <div id="card-unrealized-pnl" class="metric-value mono">$0.00 USDT</div>
+        <div id="card-position-contracts" class="metric-sub mono">0 Contracts (5x Isolated)</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">
+          <span>Open Orders</span>
+        </div>
+        <div id="card-open-orders-count" class="metric-value mono">0 Orders</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.2rem;">
+          <span id="card-grid-step" class="metric-sub mono">Step: $0.00</span>
+          <span id="card-margin-used" class="metric-sub mono" style="color: var(--accent-cyan);">Margin: $0.00</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Confluence Strip (Instrumen | Saldo | Posisi | Sinyal) -->
+    <section class="confluence-strip">
+      <div class="confluence-cell">
+        <span class="cf-k">Instrumen</span>
+        <span id="cf-instrument" class="cf-v mono">--</span>
+      </div>
+      <div class="confluence-cell">
+        <span class="cf-k">Free Margin</span>
+        <span id="cf-free-margin" class="cf-v mono profit-green">$--.--</span>
+      </div>
+      <div class="confluence-cell">
+        <span class="cf-k">Sinyal AI</span>
+        <span id="cf-ai-signal" class="cf-v mono">STANDBY</span>
+      </div>
+    </section>
+
+    <!-- Konfluensi Multi-Timeframe (1H | Primer | AI/Quant) -->
+    <section class="confluence-mtf">
+      <div class="confluence-cell">
+        <span class="cf-k">1H Macro</span>
+        <span class="cf-v mono"><span id="mtf-1h-trend" class="trend-neutral">--</span> <span id="mtf-1h-rsi" class="cf-sub">RSI --</span></span>
+      </div>
+      <div class="confluence-cell">
+        <span class="cf-k"><span id="mtf-tf-label">Primer</span> Bias</span>
+        <span class="cf-v mono"><span id="mtf-primary-trend" class="trend-neutral">--</span> <span id="mtf-primary-rsi" class="cf-sub">RSI --</span></span>
+      </div>
+      <div class="confluence-cell">
+        <span class="cf-k">AI / Quant</span>
+        <span id="mtf-ai-status" class="cf-v mono">--</span>
+      </div>
+    </section>
+
+    <!-- Risk per Transaksi (read-only additive panel; data from API payload basket[0]) -->
+    <section class="confluence-mtf confluence-risk">
+      <div class="confluence-cell">
+        <span class="cf-k">Risk / Transaksi</span>
+        <span id="risk-pct" class="cf-v mono">--</span>
+      </div>
+      <div class="confluence-cell">
+        <span class="cf-k">Risk (USD)</span>
+        <span id="risk-usd" class="cf-v mono">--</span>
+      </div>
+      <div class="confluence-cell">
+        <span class="cf-k">Sizing</span>
+        <span id="risk-sizing-source" class="cf-v mono">--</span>
+      </div>
+      <div class="confluence-cell">
+        <span class="cf-k">Min Notional &middot; Fee</span>
+        <span class="cf-v mono"><span id="risk-min-notional" class="cf-sub">--</span> <span id="risk-fee-pct" class="cf-sub">Fee --</span></span>
+      </div>
+    </section>
+
+    <!-- Dashboard Columns -->
+    <section class="dashboard-grid">
+      
+      <!-- Left Column: Controls & Market Scanner -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Control Panel Card -->
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">⚙️ Control Center</h2>
+            <span id="control-active-badge" class="ladder-badge" style="background: rgba(255,255,255,0.05); color: var(--text-dim);">STANDBY</span>
+          </div>
+
+          <form id="bot-control-form" class="control-form" onsubmit="return false;">
+            
+            <!-- Execution Mode & Margin Currency Selection -->
+            <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 0.75rem;">
+              <div class="form-group">
+                <label class="form-label">Trading Environment</label>
+                <div class="mode-toggle">
+                  <button type="button" class="mode-btn demo" data-mode="demo" onclick="setMode('demo')">Demo</button>
+                  <button type="button" class="mode-btn active live" data-mode="live" onclick="setMode('live')">Real Live</button>
+                  <button type="button" class="mode-btn simulation" data-mode="simulation" onclick="setMode('simulation')">Simulasi</button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Margin Asset</label>
+                <div class="mode-toggle two-cols">
+                  <button type="button" id="btn-quote-usdt" class="mode-btn active" style="font-weight: 700;" onclick="setQuoteAsset('USDT')">USDT</button>
+                  <button type="button" id="btn-quote-usdc" class="mode-btn" style="font-weight: 700;" onclick="setQuoteAsset('USDC')">USDC</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Target Coin Input & Quick Picks -->
+            <div class="form-group">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label class="form-label" for="input-symbol">Coin Pair</label>
+                <label style="font-size: 0.75rem; color: var(--accent-cyan); display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                  <input type="checkbox" id="check-autopick" checked onchange="toggleAutoPick(this.checked)">
+                  Auto-Pick & Auto-Rotate #1
+                </label>
+              </div>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="text" id="input-symbol" class="input-text mono" value="" placeholder="Auto-Pick Bullish (or click to browse 700+ coins)" onclick="openCoinDrawer()" style="cursor: pointer; flex: 1;">
+                <button type="button" id="btn-browse-coins" class="quick-btn" style="padding: 0.5rem 0.85rem; font-size: 0.82rem; white-space: nowrap; background: rgba(6,182,212,0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.35rem;" onclick="openCoinDrawer()">
+                  <span>🔍</span><span>Pilih Koin</span>
+                </button>
+              </div>
+              
+              <div class="quick-coins" id="quick-coins-container">
+                <span style="font-size: 0.75rem; color: var(--text-dim); align-self: center;">Binance Top:</span>
+                <span style="font-size: 0.75rem; color: var(--text-dim);">Scanning live...</span>
+              </div>
+            </div>
+
+            <!-- Total Investment, Basket Size, Grids, & Stop Loss -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+              <div class="form-group">
+                <label class="form-label" for="select-basket-size">🧺 Mode Basket (Diversifikasi)</label>
+                <select id="select-basket-size" class="input-text mono" style="background: rgba(15, 23, 42, 0.8);">
+                  <option value="3" selected>Top 3 Bullish (Recommended)</option>
+                  <option value="2">Top 2 Bullish Coins</option>
+                  <option value="1">Single Coin (100% Margin)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" id="label-investment" for="input-investment">Total Margin (USDT)</label>
+                <input type="number" id="input-investment" class="input-text mono" placeholder="Auto Sync Saldo" min="5" step="1">
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.5rem;">
+              <div class="form-group">
+                <label class="form-label" for="input-grids">Grids Count</label>
+                <input type="number" id="input-grids" class="input-text mono" value="8" min="3" max="50">
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="input-stoploss">Stop Loss ($)</label>
+                <input type="number" id="input-stoploss" class="input-text mono" placeholder="Auto AI" step="any">
+              </div>
+            </div>
+
+            <!-- Action Buttons Group (Start & Stop) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.75rem;">
+              <button type="button" id="btn-start-bot" class="btn-action btn-start" onclick="handleStartBot()">
+                <span>🚀</span>
+                <span>START BOT</span>
+              </button>
+              <button type="button" id="btn-stop-bot" class="btn-action btn-stop" onclick="handleStopBot()">
+                <span>🛑</span>
+                <span>STOP BOT</span>
+              </button>
+            </div>
+            <div id="bot-action-hint" style="font-size: 0.78rem; text-align: center; margin-top: 0.5rem; color: var(--text-dim);">
+              ○ Memeriksa status bot...
+            </div>
+          </form>
+        </div>
+
+        <!-- Live Market Scanner Card with Dual Tabs -->
+        <div class="panel">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 0.5rem;">
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <button type="button" id="tab-scan-alpha" class="quick-btn" style="font-weight: 700; border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(6,182,212,0.12);" onclick="switchScannerTab('alpha')">💎 Edge-Aligned (Entry-Ready)</button>
+              <button type="button" id="tab-scan-bullish" class="quick-btn" style="font-weight: 600; color: var(--text-dim);" onclick="switchScannerTab('bullish')">🔥 Top Bullish</button>
+            </div>
+            <button type="button" class="quick-btn" onclick="refreshScanner(true)">🔄 Scan</button>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="bulls-table">
+              <thead>
+                <tr>
+                  <th>Coin</th>
+                  <th>Price</th>
+                  <th id="th-scanner-metric" title="Trend bias &amp; rasio volume (edge-aligned entry-ready)">Trend / Vol</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="scanner-table-body">
+                <tr><td colspan="4" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">Scanning market data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Visual Grid Ladder & Live Log Terminal -->
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+        
+        <!-- Visual Grid Ladder Card -->
+        <div class="panel">
+          <div class="panel-header">
+            <h2 class="panel-title">🪜 Visual Grid Ladder</h2>
+            <div id="ladder-range-label" class="mono" style="font-size: 0.8rem; color: var(--text-muted);">Range: -- s/d --</div>
+          </div>
+
+          <!-- Basket Coin Switcher Tabs -->
+          <div id="ladder-coin-tabs" style="display: none; gap: 0.4rem; padding: 0.4rem 0.2rem; overflow-x: auto; margin-bottom: 0.6rem; border-bottom: 1px solid rgba(255,255,255,0.06);">
+          </div>
+
+          <!-- Vertical Grid Ladder Visualizer -->
+          <div id="grid-ladder-display" class="ladder-container">
+            <div style="text-align: center; color: var(--text-dim); padding: 2rem;">
+              Nyalakan bot untuk melihat jaring undak beli dan jual secara live.
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-Time Event Log Terminal -->
+        <div class="panel">
+          <div class="panel-header">
+            <div style="display: flex; align-items: center; gap: 0.6rem;">
+              <h2 class="panel-title">📟 Live Execution Terminal</h2>
+              <span class="status-dot" style="background: var(--accent-cyan); box-shadow: 0 0 10px var(--accent-cyan-glow);"></span>
+              <span id="terminal-heartbeat-badge" class="mono" style="font-size: 0.75rem; color: var(--accent-cyan);">CLI Stream Active</span>
+            </div>
+            <div style="display: flex; gap: 0.4rem;">
+              <button type="button" class="quick-btn" onclick="copyTerminalLogs()">📋 Copy</button>
+              <button type="button" class="quick-btn" onclick="clearLogs()">Clear</button>
+            </div>
+          </div>
+
+          <div id="log-terminal" class="log-terminal">
+            <div class="log-entry info">
+              <span class="log-time">[SYSTEM]</span>
+              <span>Web Dashboard ready. Live CLI Heartbeat streaming...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-Time Profit & Loss (P&L) Log Terminal -->
+        <div class="panel">
+          <div class="panel-header" style="flex-wrap: wrap; gap: 0.6rem;">
+            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+              <h2 class="panel-title">💰 Log Terminal Profit & Loss</h2>
+              <span id="pnl-terminal-total" class="ladder-badge badge-buy mono font-bold" style="font-size: 0.8rem;">+$0.0000 USDT</span>
+              <span id="pnl-terminal-stats" class="ladder-badge" style="background: rgba(255,255,255,0.06); color: var(--text-muted); font-size: 0.75rem;">0 TP (Wins) / 0 CL (Losses)</span>
+            </div>
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <div class="pnl-filter-group" style="display: flex; gap: 0.15rem; background: rgba(0,0,0,0.4); padding: 2px; border-radius: 6px; border: 1px solid var(--border-subtle);">
+                <button type="button" id="pnl-filter-all" class="pnl-filter-btn active" onclick="filterPnlLogs('ALL')">Semua</button>
+                <button type="button" id="pnl-filter-profit" class="pnl-filter-btn" onclick="filterPnlLogs('PROFIT')">🟢 Profit (TP)</button>
+                <button type="button" id="pnl-filter-loss" class="pnl-filter-btn" onclick="filterPnlLogs('LOSS')">🔴 Loss (CL)</button>
+              </div>
+              <button type="button" class="quick-btn" onclick="copyPnlLogs()">📋 Copy</button>
+              <button type="button" class="quick-btn" onclick="clearPnlLogs()">Clear</button>
+            </div>
+          </div>
+
+          <div id="pnl-log-terminal" class="log-terminal" style="height: 200px; border-left: 3px solid var(--accent-green);">
+            <div id="pnl-empty-msg" style="text-align: center; color: var(--text-dim); padding: 1.5rem 0.5rem; font-size: 0.85rem;">
+              <span>📊 Menunggu eksekusi Take-Profit (TP) atau Cut-Loss (CL) live di Binance...</span>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem;">Setiap pencapaian profit atau cut-loss akan tercatat otomatis di sini.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- Binance Futures Trading Data Hub (Positions, Open Orders, Order History, Trade History) -->
+    <section class="panel" style="margin-top: 1.5rem;">
+      <div class="panel-header" style="flex-wrap: wrap; gap: 0.75rem;">
+        <!-- Navigation Tabs -->
+        <div class="trade-tabs" style="margin-bottom: 0; border-bottom: none;">
+          <button type="button" class="trade-tab-btn active" data-tab="tab-positions" onclick="switchTradeTab('tab-positions')">
+            <span>📊 Active Positions</span>
+            <span id="badge-positions-count" class="tab-badge">0</span>
+          </button>
+          <button type="button" class="trade-tab-btn" data-tab="tab-open-orders" onclick="switchTradeTab('tab-open-orders')">
+            <span>🪜 Open Orders</span>
+            <span id="badge-open-orders-count" class="tab-badge">0</span>
+          </button>
+          <button type="button" class="trade-tab-btn" data-tab="tab-order-history" onclick="switchTradeTab('tab-order-history')">
+            <span>📜 Order History</span>
+          </button>
+          <button type="button" class="trade-tab-btn" data-tab="tab-trade-history" onclick="switchTradeTab('tab-trade-history')">
+            <span>💰 Trade History</span>
+          </button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <select id="trade-hub-filter" class="quick-btn" style="background: rgba(0,0,0,0.4); color: var(--text-main); font-size: 0.8rem; padding: 0.35rem 0.6rem; cursor: pointer;" onchange="onHubFilterChange(this.value)">
+            <option value="ALL">🌐 Semua Order & Posisi di Binance</option>
+            <option value="SELECTED">🎯 Sesuai Koin Terpilih</option>
+          </select>
+          <button type="button" class="quick-btn" onclick="refreshTradingData()">🔄 Sync Binance</button>
+          <button type="button" class="quick-btn" style="color: var(--accent-red); border-color: rgba(239,68,68,0.3);" onclick="cancelAllOrders()">❌ Cancel All Orders</button>
+        </div>
+      </div>
+
+      <!-- Tab Content: Active Positions -->
+      <div id="tab-positions" class="tab-content active" style="overflow-x: auto; margin-top: 0.5rem;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Side</th>
+              <th>Contracts</th>
+              <th>Entry Price</th>
+              <th>Mark Price</th>
+              <th>TP1 / Exit</th>
+              <th>Margin (USDT)</th>
+              <th>Unrealized PnL (ROE %)</th>
+              <th>Liq. Price</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="table-positions-body">
+            <tr><td colspan="10" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">Tidak ada posisi terbuka saat ini (0 Contracts / FLAT).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab Content: Open Orders -->
+      <div id="tab-open-orders" class="tab-content" style="overflow-x: auto; margin-top: 0.5rem;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Symbol</th>
+              <th>Type</th>
+              <th>Side</th>
+              <th>Price</th>
+              <th>Amount</th>
+              <th>Filled</th>
+              <th>Remaining</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="table-open-orders-body">
+            <tr><td colspan="10" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">Memuat daftar order aktif dari Binance...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab Content: Order History -->
+      <div id="tab-order-history" class="tab-content" style="overflow-x: auto; margin-top: 0.5rem;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Order ID</th>
+              <th>Symbol</th>
+              <th>Type</th>
+              <th>Side</th>
+              <th>Price</th>
+              <th>Amount</th>
+              <th>Filled</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="table-order-history-body">
+            <tr><td colspan="9" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">Memuat riwayat order...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab Content: Trade History -->
+      <div id="tab-trade-history" class="tab-content" style="overflow-x: auto; margin-top: 0.5rem;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Trade ID</th>
+              <th>Symbol</th>
+              <th>Side</th>
+              <th>Executed Price</th>
+              <th>Amount</th>
+              <th>Cost (USDT)</th>
+              <th>Fee</th>
+            </tr>
+          </thead>
+          <tbody id="table-trade-history-body">
+            <tr><td colspan="8" style="text-align: center; color: var(--text-dim); padding: 1.5rem;">Memuat riwayat transaksi...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- In-App Coin Switch Modal -->
+  <div id="coin-switch-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.78); backdrop-filter: blur(5px); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: var(--bg-card); border: 1px solid var(--accent-cyan); border-radius: 14px; padding: 1.75rem; max-width: 440px; width: 90%; box-shadow: 0 15px 35px rgba(0,0,0,0.85); text-align: center;">
+      <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">⚡</div>
+      <h3 style="margin-bottom: 0.6rem; font-size: 1.2rem; color: var(--text-main);">Ganti Koin Trading Bot?</h3>
+      <p id="switch-modal-desc" style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-bottom: 1.5rem;">
+        Bot saat ini sedang aktif di Binance. Mengalihkan ke koin baru akan membatalkan limit order koin lama dan langsung menyebarkan jaring grid baru di Binance.
+      </p>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+        <button type="button" class="quick-btn" style="padding: 0.65rem;" onclick="closeSwitchModal()">Batal</button>
+        <button type="button" id="btn-confirm-switch" class="btn-action btn-start" style="padding: 0.65rem; justify-content: center; margin-top: 0;" onclick="confirmSwitchCoin()">🚀 Ganti Sekarang</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Binance Market Pairs Drawer / Modal -->
+  <div id="binance-market-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); backdrop-filter: blur(8px); z-index: 10000; justify-content: center; align-items: center; padding: 1rem;">
+    <div style="background: #181a20; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; max-width: 720px; width: 100%; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 25px 60px rgba(0,0,0,0.95); overflow: hidden;">
+      
+      <!-- Modal Header -->
+      <div style="padding: 1.1rem 1.4rem; border-bottom: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center; background: rgba(24,26,32,0.95);">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span style="background: #f0b90b; color: #000; font-weight: 900; font-size: 0.85rem; padding: 2px 7px; border-radius: 4px;">BINANCE</span>
+          <span style="font-weight: 700; font-size: 1.05rem; color: #eaecef;">USDⓈ-M Futures Markets</span>
+          <span id="market-total-badge" style="font-size: 0.75rem; background: rgba(255,255,255,0.08); color: #848e9c; padding: 2px 6px; border-radius: 10px;">700+ Pairs</span>
+        </div>
+        <button type="button" onclick="closeCoinDrawer()" style="background: transparent; border: none; color: #848e9c; font-size: 1.4rem; cursor: pointer; padding: 0.2rem 0.5rem; line-height: 1;">✕</button>
+      </div>
+
+      <!-- Search & Category Filters -->
+      <div style="padding: 0.85rem 1.4rem; border-bottom: 1px solid rgba(255,255,255,0.06); background: #1e2026; display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="position: relative;">
+          <input type="text" id="market-search-input" class="input-text mono" placeholder="🔍 Cari koin (contoh: XAU, HBAR, SOL, BTC, ETH)..." oninput="filterMarketPairs()" style="background: #2b313a; border-color: rgba(255,255,255,0.12); padding-left: 2.2rem; font-size: 0.95rem; border-radius: 8px;">
+          <span style="position: absolute; left: 0.8rem; top: 50%; transform: translateY(-50%); color: #848e9c; font-size: 0.9rem;">🔎</span>
+        </div>
+        <div style="display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 2px;" id="market-category-pills">
+          <button type="button" class="quick-btn active-category" data-cat="ALL" onclick="setMarketCategory('ALL')">Semua Koin</button>
+          <button type="button" class="quick-btn" data-cat="USDT" onclick="setMarketCategory('USDT')">USDT</button>
+          <button type="button" class="quick-btn" data-cat="USDC" onclick="setMarketCategory('USDC')">USDC</button>
+          <button type="button" class="quick-btn" data-cat="GOLD" onclick="setMarketCategory('GOLD')" style="color: #f0b90b; border-color: rgba(240,185,11,0.3);">🥇 TradFi / Gold (XAU)</button>
+          <button type="button" class="quick-btn" data-cat="VOLUME" onclick="setMarketCategory('VOLUME')">🔥 Top Volume</button>
+          <button type="button" class="quick-btn" data-cat="GAINERS" onclick="setMarketCategory('GAINERS')">🚀 Top Gainers (+%)</button>
+        </div>
+      </div>
+
+      <!-- Auto-Pick Special Row -->
+      <div style="padding: 0.65rem 1.4rem; background: rgba(6,182,212,0.08); border-bottom: 1px solid rgba(6,182,212,0.2); display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span style="font-size: 1.1rem;">💎</span>
+          <div>
+            <div style="font-weight: 700; font-size: 0.88rem; color: var(--accent-cyan);">Auto-Pick Edge-Aligned (Entry-Ready)</div>
+            <div style="font-size: 0.74rem; color: #848e9c;">AI &amp; BOT memilih koin yang benar-benar bisa di-entry engine live (trend != BULLISH, volume live) — bukan mengejar puncak</div>
+          </div>
+        </div>
+        <button type="button" class="quick-btn" style="background: rgba(6,182,212,0.2); border-color: var(--accent-cyan); color: var(--accent-cyan); font-weight: 700;" onclick="selectAutoPickFromModal()">Pilih Auto-Pick</button>
+      </div>
+
+      <!-- Table Header -->
+      <div style="padding: 0.5rem 1.4rem; background: #121418; display: grid; grid-template-columns: 2.2fr 1.3fr 1.2fr 1.2fr 0.9fr; font-size: 0.74rem; color: #848e9c; font-weight: 600; text-transform: uppercase;">
+        <div>Symbols / 24h Vol</div>
+        <div style="text-align: right;">Last Price</div>
+        <div style="text-align: right;">24h Chg</div>
+        <div style="text-align: right;">Funding Rate</div>
+        <div style="text-align: center;">Pilih</div>
+      </div>
+
+      <!-- Table Body (Scrollable) -->
+      <div id="market-pairs-list" style="overflow-y: auto; flex: 1; min-height: 250px; max-height: 480px; padding: 0.2rem 0;">
+        <div style="text-align: center; color: #848e9c; padding: 3rem 1rem;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">⏳</div>
+          <div>Memuat data live 700+ pair Binance Futures & Funding Rate...</div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div style="padding: 0.7rem 1.4rem; border-top: 1px solid rgba(255,255,255,0.06); background: #181a20; display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: #848e9c;">
+        <span>💡 Klik salah satu baris koin untuk langsung memilih koin tersebut.</span>
+        <button type="button" class="quick-btn" onclick="closeCoinDrawer()">Tutup</button>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=3.1"></script>
+</body>
+</html>
