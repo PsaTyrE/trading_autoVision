@@ -23,3 +23,15 @@ logs/debate/*.json
 research/cache/*.csv
 deploy/
 .gitignore
+.env
+.env.bak*
+.tg_creds
+trade_journal.log
+*.log
+trading_memory.json
+auto_pilot_trader_v11.py
+muse_consult.py
+bar_digest.py
+gate_report.py
+research/
+web/
