@@ -6,3 +6,5 @@ venv/
 *.log
 check_*.py
 logs/debate/*.json
+.env.bak*
+*.bak_*
