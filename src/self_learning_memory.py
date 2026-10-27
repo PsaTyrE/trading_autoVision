@@ -125,8 +125,8 @@ class SelfLearningMemory:
 
             lesson = f"Evaluasi Rugi ({symbol}): Entry gagal ({reason_detail}). Loss: ${pnl:.2f}."
             
-            # Apply 4-Hour Cooldown quarantine to this coin (strictly eliminate revenge trading)
-            cooldown_seconds = 14400 # 4 hours
+            # Apply Cooldown quarantine to this coin (strictly eliminate revenge trading)
+            cooldown_seconds = int(getattr(config, "memory_cooldown_seconds", 14400))
             self.symbol_cooldowns[symbol] = now + cooldown_seconds
 
         record = {

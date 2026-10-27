@@ -19,7 +19,8 @@ def main():
     from src.live_trader import BinanceFuturesTrader
     # DOTENV_EXPLICIT: cron cwd=/home/pi, so MANUAL_SYMBOLS was silently empty.
     from dotenv import load_dotenv
-    load_dotenv("/home/pi/latihan/.env", override=True)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    load_dotenv(os.path.join(base_dir, ".env"), override=True)
     results = {"accounts": {}, "actions": []}
     exit_code = 0
     # LIVE_ONLY: the bot never trades demo; scanning it only burned API calls

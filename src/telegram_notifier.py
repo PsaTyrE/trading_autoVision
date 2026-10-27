@@ -24,7 +24,9 @@ class TelegramNotifier:
         # is not lost to a transient network blip.
         for attempt in (1, 2):
             try:
-                requests.post(url, json=payload, timeout=10)
+                resp = requests.post(url, json=payload, timeout=10)
+                if resp.status_code != 200:
+                    print(f"[!] Telegram API error {resp.status_code}: {resp.text[:100]}")
                 return
             except Exception as e:
                 if attempt == 2:

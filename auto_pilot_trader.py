@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import csv
 """
 Autonomous Senior Trader Engine (Pi Daemon) - Multi-Position + Correlation Guard
 Handles:
@@ -31,16 +32,17 @@ import contextlib
 import ccxt
 import pandas as pd
 
-sys.path.insert(0, "/home/pi/latihan")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
 from src.live_trader import BinanceFuturesTrader
 from src import strategy
 
 from dotenv import load_dotenv
-load_dotenv("/home/pi/latihan/.env", override=True)
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=True)
 
 WATCHLIST = [
     "BTC/USDT:USDT", "ETH/USDT:USDT", "XAU/USDT:USDT", "ZEC/USDT:USDT", "SOL/USDT:USDT",
-    "NEAR/USDT:USDT", "HYPE/USDT:USDT", "XRP/USDT:USDT", "WLD/USDT:USDT", "1000PEPE/USDT:USDT",
+    "NEAR/USDT:USDT", "HYPE/USDT:USDT", "XRP/USDT:USDT", "WLD/USDT:USDT", 
     "DOGE/USDT:USDT", "ENA/USDT:USDT", "IOST/USDT:USDT", "UNI/USDT:USDT", "BNB/USDT:USDT",
     "PUMP/USDT:USDT", "SUI/USDT:USDT", "ARB/USDT:USDT", "XMR/USDT:USDT", "GTC/USDT:USDT",
     "INJ/USDT:USDT", "ADA/USDT:USDT", "TIA/USDT:USDT", "AVAX/USDT:USDT", "TAO/USDT:USDT",
@@ -52,9 +54,9 @@ WATCHLIST = [
 
 MAX_LEVERAGE = 5
 MAX_MARGIN_PCT = 0.85
-STATE_FILE = "/home/pi/latihan/autonomous_trader_state.json"
-JOURNAL = "/home/pi/latihan/trade_log.csv"
-CLOSED = "/home/pi/latihan/trade_closed.csv"
+STATE_FILE = os.getenv("STATE_FILE", os.path.join(BASE_DIR, "autonomous_trader_state.json"))
+JOURNAL = os.getenv("JOURNAL_FILE", os.path.join(BASE_DIR, "trade_log.csv"))
+CLOSED = os.getenv("CLOSED_FILE", os.path.join(BASE_DIR, "trade_closed.csv"))
 DAILY_CAP_SEC = int(os.getenv("DAILY_CAP_SEC", "86400"))
 DAILY_MAX = int(os.getenv("MAX_DAILY_ENTRIES", "3"))
 RISK_USDT = float(os.getenv("RISK_USDT", "1.90"))
@@ -68,7 +70,7 @@ CLUSTERS = {
     "COMMODITY": ["XAU/USDT:USDT"],
     "BTC_PROXY": ["BTC/USDT:USDT", "BCH/USDT:USDT", "LTC/USDT:USDT"],
     "ETH_DEFI": ["ETH/USDT:USDT", "UNI/USDT:USDT", "AAVE/USDT:USDT", "COMP/USDT:USDT", "ENA/USDT:USDT", "LINK/USDT:USDT"],
-    "SOL_MEME": ["SOL/USDT:USDT", "WIF/USDT:USDT", "1000PEPE/USDT:USDT", "DOGE/USDT:USDT", "PUMP/USDT:USDT"],
+    "SOL_MEME": ["SOL/USDT:USDT", "WIF/USDT:USDT", "DOGE/USDT:USDT", "PUMP/USDT:USDT"],
     "L1_INFRA": ["BNB/USDT:USDT", "AVAX/USDT:USDT", "SUI/USDT:USDT", "APT/USDT:USDT", "NEAR/USDT:USDT", "ADA/USDT:USDT", "INJ/USDT:USDT", "TIA/USDT:USDT"],
     "L2_MODULAR": ["ARB/USDT:USDT", "STRK/USDT:USDT", "ALT/USDT:USDT", "ZRO/USDT:USDT"],
     "PRIVACY_OTHER": ["XMR/USDT:USDT", "ZEC/USDT:USDT", "TAO/USDT:USDT", "WLD/USDT:USDT", "FIL/USDT:USDT", "ONDO/USDT:USDT", "TRUMP/USDT:USDT"]
@@ -85,7 +87,8 @@ def log(msg):
 
 def load_state():
     try:
-        return json.load(open(STATE_FILE))
+        with open(STATE_FILE, "r") as f:
+            return json.load(f)
     except Exception:
         return {"active_trades": {}, "active_trade": None, "last_scan": 0}
 
@@ -149,7 +152,6 @@ def log_close_if_flat(t, st):
         r = net / risk if risk else 0.0
         try:
             new = not os.path.exists(CLOSED)
-            import csv
             with open(CLOSED, "a", newline="") as f:
                 w = csv.writer(f)
                 if new:
@@ -717,7 +719,6 @@ def scan_and_enter(t):
 
         fee_rt = notional * 0.001
         try:
-            import csv
             new = not os.path.exists(JOURNAL)
             with open(JOURNAL, "a", newline="") as f:
                 w = csv.writer(f)

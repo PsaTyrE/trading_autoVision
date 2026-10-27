@@ -1,3 +1,5 @@
+import logging
+logger = logging.getLogger(__name__)
 import ccxt
 import pandas as pd
 from typing import Optional
