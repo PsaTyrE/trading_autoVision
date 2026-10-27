@@ -283,8 +283,8 @@ Output ONLY valid JSON:
         vote_actions = [v.action for v in votes]
 
         # Count agreement with proposed
-        agree_count = sum(1 for v in vote_actions if v.action == proposed and proposed != "HOLD")
-        hold_votes = sum(1 for v in vote_actions if v.action == "HOLD")
+        agree_count = sum(1 for v in votes if v.action == proposed and proposed != 'HOLD')
+        hold_votes = sum(1 for v in votes if v.action == 'HOLD')
 
         # Decision logic
         if hold_votes > 0:
@@ -320,7 +320,8 @@ Output ONLY valid JSON:
     def _log_decision(self, snap: Dict[str, Any], result: DebateResult, duration: float) -> str:
         """Write decision log to JSON file."""
         ts = int(time.time())
-        filename = f"debate_{snap.get('symbol', 'unknown')}_{ts}.json"
+        safe_symbol = snap.get('symbol', 'unknown').replace('/', '_').replace(':', '_')
+        filename = f"debate_{safe_symbol}_{ts}.json"
         filepath = os.path.join(self.decision_log_dir, filename)
 
         log_entry = {

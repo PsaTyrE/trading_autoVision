@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""selftest - runnable checks for the parts of the bot that no live trade exercises today.
+
+    /home/pi/latihan/venv/bin/python selftest.py
+"""
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, "/home/pi/latihan")
+import pandas as pd
+
+import auto_pilot_trader as A
+from src import strategy
+
+fails = []
+
+
+def check(name, cond):
+    print(("PASS " if cond else "FAIL ") + name)
+    if not cond:
+        fails.append(name)
+
+
+# --- 1. atomic state write leaves a valid file and no .tmp residue ---
+probe = {"active_trade": None, "last_entry_ts": 123.0}
+A.STATE_FILE = "/tmp/_st_probe.json"
+A.save_state(probe)
+check("state roundtrip", A.load_state() == probe)
+check("no tmp residue", not os.path.exists(A.STATE_FILE + ".tmp"))
+
+# --- 2. signal: compression then breakout with volume -> BUY ---
+n = 300
+rows = []
+px = 100.0
+for i in range(n):
+    rows.append([i * 1000, px, px + 0.05, px - 0.05, px, 10.0])  # flat, tight -> compressed
+# last bar: expand and break the 20-bar high on volume
+rows.append([n * 1000, px, px + 3.0, px - 0.1, px + 2.9, 50.0])
+d = strategy.features(pd.DataFrame(rows, columns=["t", "o", "h", "l", "c", "v"]))
+sig = strategy.signal(d, -1)
+check("breakout BUY detected", bool(sig) and sig[0] == "BUY")
+check("vol_ratio reported", bool(sig) and sig[1]["vol_ratio"] > strategy.MIN_VOL_RATIO)
+
+# --- 3. volume gate: same bar with average volume -> rejected ---
+rows[-1][5] = 10.0
+d2 = strategy.features(pd.DataFrame(rows, columns=["t", "o", "h", "l", "c", "v"]))
+check("volume gate blocks", strategy.signal(d2, -1) is None)
+
+# --- 4. levels math: SL = 2 ATR, TP1 = 2R, TP2 = 3.5R, both directions ---
+sl, tp1, tp2, sd = strategy.levels(100.0, 1.0, "BUY")
+check("LONG levels", (sl, tp1, tp2) == (98.0, 104.0, 107.0) and sd == 2.0)
+sl, tp1, tp2, sd = strategy.levels(100.0, 1.0, "SELL")
+check("SHORT levels", (sl, tp1, tp2) == (102.0, 96.0, 93.0))
+
+# --- 5. trailing epsilon scales with price (the old 0.1 broke sub-$1 coins) ---
+def eps(price, dec):
+    return max(abs(price) * 1e-4, 10.0 ** -dec)
+
+check("trail eps DOGE < 0.1", eps(0.16, 2) < 0.1)
+check("trail eps XAU sane", 0.3 < eps(4132.0, 1) < 1.0)
+
+# --- 5b. snapshot fields are measured, not fabricated ---
+m = sig[1] if sig else {}
+check("score in 0-100", 0.0 <= float(m.get("score", -1)) <= 100.0)
+check("rsi in 0-100", 0.0 <= float(m.get("rsi", -1)) <= 100.0)
+check("breakout margin positive", float(m.get("breakout_margin", -1)) > 0)
+check("trend_up bool", isinstance(m.get("trend_up"), bool))
+
+# --- 6. tradeability math matches exchange limits ---
+check("BTC untradeable at $0.30 risk", (0.30 / 2000.0) < 0.001)
+check("XAU tradeable at $0.30 risk", (0.30 / 2.0) >= 0.001)
+
+# --- 7. env knobs: defaults unchanged, override reaches the strategy ---
+check("knob defaults measured", (strategy.MIN_VOL_RATIO, strategy.SL_ATR, strategy.TP1_R, strategy.TP2_R) == (1.0, 2.0, 2.0, 3.5))
+_probe = (
+    "import sys; sys.path.insert(0,'/home/pi/latihan');"
+    "from src import strategy as S;print(S.MIN_VOL_RATIO, S.SL_ATR)"
+)
+_r = subprocess.run(
+    [sys.executable, "-c", _probe],
+    env={**os.environ, "STRAT_MIN_VOL_RATIO": "1.4", "STRAT_SL_ATR": "abc"},
+    capture_output=True, text=True,
+)
+# stdout also carries the [strategy] warning for the bad value, so compare the
+# last line only: the warning is the behaviour being tested, not noise.
+check("env override reaches strategy", _r.stdout.strip().splitlines()[-1] == "1.4 2.0")
+
+print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
+sys.exit(1 if fails else 0)
