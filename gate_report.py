@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Gate report: the two conditions for adding capital. One file, stdlib csv only."""
 import csv, os, sys
-sys.path.insert(0, "/home/pi/latihan")
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
 
-CLOSED = "/home/pi/latihan/trade_closed.csv"
+CLOSED = os.path.join(_ROOT, "trade_closed.csv")
 NEED_N, NEED_R, NEED_WR = 30, 3.0, 30.0
 ABORT_N = 20  # kill-switch: 20 closed + sumR<=0 = ladder hypothesis failed
 

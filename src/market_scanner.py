@@ -1,11 +1,14 @@
 import threading
 import time
+import logging
 import ccxt
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 from src.config import config
 from src.indicators import calculate_technical_indicators, extract_market_snapshot, _sig_round
+
+logger = logging.getLogger("market_scanner")
 
 # Dynamic Fallback Symbols (Only symbol strings to query real Binance API if network is transient)
 DEFAULT_SCAN_SYMBOLS = [

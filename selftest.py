@@ -7,7 +7,8 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(0, "/home/pi/latihan")
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
 import pandas as pd
 
 import auto_pilot_trader as A
@@ -75,7 +76,7 @@ check("XAU tradeable at $0.30 risk", (0.30 / 2.0) >= 0.001)
 
 # --- 7. env knobs: defaults unchanged, override reaches the strategy ---
 _probe0 = (
-    "import sys; sys.path.insert(0,'/home/pi/latihan');"
+    f"import sys; sys.path.insert(0,{_ROOT!r});"
     "from src import strategy as S;"
     "print(S.MIN_VOL_RATIO, S.SL_ATR, S.TP1_R, S.TP2_R)"
 )
@@ -85,7 +86,7 @@ _r0 = subprocess.run([sys.executable, "-c", _probe0], env=_env0,
 check("knob defaults measured",
       _r0.stdout.strip().splitlines()[-1] == "1.0 2.0 2.0 3.5")
 _probe = (
-    "import sys; sys.path.insert(0,'/home/pi/latihan');"
+    f"import sys; sys.path.insert(0,{_ROOT!r});"
     "from src import strategy as S;print(S.MIN_VOL_RATIO, S.SL_ATR)"
 )
 _r = subprocess.run(

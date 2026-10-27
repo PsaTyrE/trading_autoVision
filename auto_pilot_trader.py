@@ -389,10 +389,12 @@ def scan_and_enter(t):
 
     # --- CIRCUIT BREAKER ---
     try:
-        bp = "/home/pi/latihan/.equity_baseline"
+        bp = os.path.join(BASE_DIR, ".equity_baseline")
         if not os.path.exists(bp):
-            open(bp, "w").write(f"{equity:.6f}")
-        base = float(open(bp).read().strip())
+            with open(bp, "w") as _f:
+                _f.write(f"{equity:.6f}")
+        with open(bp) as _f:
+            base = float(_f.read().strip())
         breaker_threshold = float(os.getenv("CIRCUIT_BREAKER_MAX_LOSS", "5.00"))
         if equity < base - breaker_threshold:
             log(f"CIRCUIT BREAKER: equity ${equity:.2f} < ${base:.2f}-{breaker_threshold:.2f}. Entries halted.")

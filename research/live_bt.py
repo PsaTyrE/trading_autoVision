@@ -15,11 +15,12 @@ import sys
 import random
 import statistics
 
-sys.path.insert(0, "/home/pi/latihan")
-os.chdir("/home/pi/latihan")
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
+os.chdir(_ROOT)
 from dotenv import load_dotenv
 
-load_dotenv("/home/pi/latihan/.env", override=True)
+load_dotenv(os.path.join(_ROOT, ".env"), override=True)
 
 import pandas as pd
 
