@@ -235,9 +235,20 @@ class BinanceFuturesTrader:
         cached = self._cache.get(ckey)
         if cached and (now - cached["t"] < 5.0):
             return cached["data"]
-        try:
-            # Fetch without symbol filter so CCXT doesn't reject symbol format
-            positions = self.exchange.fetch_positions()
+        # RETRY_FIX: NetworkError transient, retry with backoff
+        for attempt in range(3):
+            try:
+                # Fetch without symbol filter so CCXT doesn't reject symbol format
+                positions = self.exchange.fetch_positions()
+                break
+            except Exception as e:
+                if attempt < 2:
+                    wait = 2 ** attempt  # 1s, 2s
+                    print(f"[!] Position fetch attempt {attempt+1}/3 failed: {e}. Retry in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    raise
+
             active = []
             target_clean = symbol.split(':')[0] if symbol else None
             for p in positions:
@@ -270,13 +281,6 @@ class BinanceFuturesTrader:
                     })
             self._cache[ckey] = {"t": now, "data": active}
             return active
-        except Exception as e:
-            if cached:
-                cached["t"] = now + 15.0
-                return cached["data"]
-            print(f"[!] Error fetching Binance positions: {e}")
-            self._cache[ckey] = {"t": now + 15.0, "data": []}
-            return []
 
     def get_realized_pnl(self, symbol: Optional[str] = None, limit: int = 50) -> float:
         """Fetches real realized PnL directly from Binance Futures account income (with 5s cache)."""
