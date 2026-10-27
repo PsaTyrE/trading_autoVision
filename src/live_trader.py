@@ -1,4 +1,7 @@
 import time
+import os
+
+import threading
 import hashlib
 import hmac
 import logging
@@ -75,6 +78,7 @@ class BinanceFuturesTrader:
             print(f"[!] Warning loading markets: {e}")
 
         self._cache: Dict[str, Any] = {}
+        self._cache_lock = threading.Lock()
         self.last_error: str = ""
         # AUDIT FIX: explicit health flag for the conditional-order endpoint. Empty list
         # must mean 'no stops', never 'the fetch failed'.
@@ -819,7 +823,7 @@ class BinanceFuturesTrader:
                 step = float(market.get('precision', {}).get('amount') or 0.0)
                 needed_qty = max(amount, min_amount, (min_cost * float(getattr(config, "min_notional_buffer", 1.02))) / formatted_price if formatted_price > 0 else 0.0)
                 if step > 0:
-                    import math
+
                     steps_needed = math.ceil(needed_qty / step)
                     safe_qty = steps_needed * step
                 else:
@@ -885,7 +889,7 @@ class BinanceFuturesTrader:
                         logger.debug(f"Order book fetch for ref price failed: {e}")
                 needed_qty = max(amount, min_amount, (min_cost * float(getattr(config, "min_notional_buffer", 1.02))) / ref_price if ref_price > 0 else 0.0)
                 if step > 0:
-                    import math
+
                     steps_needed = math.ceil(needed_qty / step)
                     safe_qty = steps_needed * step
                 else:
@@ -1022,7 +1026,9 @@ class BinanceFuturesTrader:
         them. ponytail: flock is host-local, which is enough because both callers run on the Pi.
         """
         import fcntl
-        with open(f"/tmp/latihan_protect_{os.getuid()}.lock", "w") as lk:
+        _clean_sym = symbol.replace("/", "_").replace(":", "_")
+        _lock_path = os.path.join("/tmp", f"bot_protect_{_clean_sym}.lock")
+        with open(_lock_path, "w") as lk:
             fcntl.flock(lk, fcntl.LOCK_EX)
             try:
                 return self._place_protective_stop(symbol, stop_price, amount, position_side)
