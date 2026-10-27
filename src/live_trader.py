@@ -249,38 +249,38 @@ class BinanceFuturesTrader:
                 else:
                     raise
 
-            active = []
-            target_clean = symbol.split(':')[0] if symbol else None
-            for p in positions:
-                contracts = float(p.get('contracts', 0) or 0)
-                if abs(contracts) > 0:
-                    pos_sym = p['symbol'].split(':')[0]
-                    if target_clean and pos_sym != target_clean:
-                        continue
-                    entry = float(p.get('entryPrice', 0) or 0)
-                    mark = float(p.get('markPrice', 0) or 0)
-                    pnl = float(p.get('unrealizedPnl', 0) or 0)
-                    liq = float(p.get('liquidationPrice', 0) or 0)
-                    lev = int(p.get('leverage', config.leverage) or config.leverage)
-                    notional = float(p.get('notional', 0) or (contracts * mark))
-                    margin = notional / lev if lev > 0 else 0
-                    pct = float(p.get('percentage', 0) or ((pnl / margin * 100) if margin > 0 else 0))
+        active = []
+        target_clean = symbol.split(':')[0] if symbol else None
+        for p in positions:
+            contracts = float(p.get('contracts', 0) or 0)
+            if abs(contracts) > 0:
+                pos_sym = p['symbol'].split(':')[0]
+                if target_clean and pos_sym != target_clean:
+                    continue
+                entry = float(p.get('entryPrice', 0) or 0)
+                mark = float(p.get('markPrice', 0) or 0)
+                pnl = float(p.get('unrealizedPnl', 0) or 0)
+                liq = float(p.get('liquidationPrice', 0) or 0)
+                lev = int(p.get('leverage', config.leverage) or config.leverage)
+                notional = float(p.get('notional', 0) or (contracts * mark))
+                margin = notional / lev if lev > 0 else 0
+                pct = float(p.get('percentage', 0) or ((pnl / margin * 100) if margin > 0 else 0))
 
-                    active.append({
-                        "symbol": pos_sym,
-                        # SIDE_FIX: contracts is unsigned in ccxt; `or contracts > 0` made every row LONG.
-                        "side": "LONG" if p.get('side') == 'long' else "SHORT",
-                        "contracts": contracts,
-                        "entry_price": entry,
-                        "mark_price": mark,
-                        "unrealized_pnl": round(pnl, 4),
-                        "percentage": round(pct, 2),
-                        "leverage": lev,
-                        "liquidation_price": liq,
-                        "margin": round(margin, 2)
-                    })
-            self._cache[ckey] = {"t": now, "data": active}
-            return active
+                active.append({
+                    "symbol": pos_sym,
+                    # SIDE_FIX: contracts is unsigned in ccxt; `or contracts > 0` made every row LONG.
+                    "side": "LONG" if p.get('side') == 'long' else "SHORT",
+                    "contracts": contracts,
+                    "entry_price": entry,
+                    "mark_price": mark,
+                    "unrealized_pnl": round(pnl, 4),
+                    "percentage": round(pct, 2),
+                    "leverage": lev,
+                    "liquidation_price": liq,
+                    "margin": round(margin, 2)
+                })
+        self._cache[ckey] = {"t": now, "data": active}
+        return active
 
     def get_realized_pnl(self, symbol: Optional[str] = None, limit: int = 50) -> float:
         """Fetches real realized PnL directly from Binance Futures account income (with 5s cache)."""
