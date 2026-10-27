@@ -122,7 +122,8 @@ class BinanceFuturesTrader:
             if ":" in cand:
                 return cand
         fallback_quote = s.split('/')[1] if '/' in s else 'USDT'
-        return f"{s}:{fallback_quote}"
+        base = s.split('/')[0]
+        return f"{base}/{fallback_quote}:{fallback_quote}"
 
     def get_trading_fee_rate(self, symbol: str) -> Optional[float]:
         """Live taker fee rate straight from Binance (VIP-tier aware). None if unavailable,
@@ -527,9 +528,6 @@ class BinanceFuturesTrader:
                 if fee_info:
                     fee_val = float(fee_info.get("cost") or 0.0)
                     fee_curr = fee_info.get("currency") or "USDT"
-                if t.get("fee"):
-                    fee_val = float(t["fee"].get("cost") or 0.0)
-                    fee_curr = t["fee"].get("currency") or "USDT"
 
                 formatted.append({
                     "id": str(t.get("id") or ""),
@@ -1024,7 +1022,7 @@ class BinanceFuturesTrader:
         them. ponytail: flock is host-local, which is enough because both callers run on the Pi.
         """
         import fcntl
-        with open("/tmp/latihan_protect.lock", "w") as lk:
+        with open(f"/tmp/latihan_protect_{os.getuid()}.lock", "w") as lk:
             fcntl.flock(lk, fcntl.LOCK_EX)
             try:
                 return self._place_protective_stop(symbol, stop_price, amount, position_side)

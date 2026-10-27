@@ -328,17 +328,10 @@ class BotConfig(BaseModel):
     # Quant decision cutoffs & consensus blend (were inline literals)
     quant_long_cutoff: float = Field(default=float(os.getenv("QUANT_LONG_CUTOFF", "62.0")))
     quant_short_cutoff: float = Field(default=float(os.getenv("QUANT_SHORT_CUTOFF", "35.0")))
-    quant_weight: float = Field(default=float(os.getenv("QUANT_WEIGHT", "0.70")))
-    ai_weight: float = Field(default=float(os.getenv("AI_WEIGHT", "0.30")))
     # Grid-count recommendation bands (volatility pct)
-    grid_count_high_vol: int = Field(default=int(os.getenv("GRID_COUNT_HIGH_VOL", "6")))
-    grid_count_mid_vol: int = Field(default=int(os.getenv("GRID_COUNT_MID_VOL", "8")))
-    grid_count_low_vol: int = Field(default=int(os.getenv("GRID_COUNT_LOW_VOL", "10")))
     vol_high_pct: float = Field(default=float(os.getenv("VOL_HIGH_PCT", "3.5")))
     vol_low_pct: float = Field(default=float(os.getenv("VOL_LOW_PCT", "1.5")))
     # Quant TP/SL distance builders
-    min_risk_dist_atr_mult: float = Field(default=float(os.getenv("MIN_RISK_DIST_ATR_MULT", "0.7")))
-    min_risk_dist_pct: float = Field(default=float(os.getenv("MIN_RISK_DIST_PCT", "0.005")))
     tp_rr_mult: float = Field(default=float(os.getenv("TP_RR_MULT", "2.0")))
     tp_atr_mult: float = Field(default=float(os.getenv("TP_ATR_MULT", "1.8")))
     # Fallback confidences (avoid fabricating when AI output is unusable)
@@ -352,11 +345,8 @@ class BotConfig(BaseModel):
     ai_conf_floor: float = Field(default=float(os.getenv("AI_CONF_FLOOR", "0.50")))
     max_ai_confidence: float = Field(default=float(os.getenv("MAX_AI_CONFIDENCE", "0.99")))
     # Fee cache TTL for live trading-fee lookups
-    fee_cache_ttl_seconds: int = Field(default=int(os.getenv("FEE_CACHE_TTL_SECONDS", "300")))
     # Minimum-notional safety buffer when sizing orders
-    min_notional_buffer: float = Field(default=float(os.getenv("MIN_NOTIONAL_BUFFER", "1.02")))
     # Last-resort ATR fallback (% of price) when candles are unavailable — logged as synthetic
-    atr_fallback_pct: float = Field(default=float(os.getenv("ATR_FALLBACK_PCT", "0.02")))
     # Opt-in override for the validated edge gate: allow BULLISH trend when no NEUTRAL
     # candidates exist (default False keeps the validated edge intact).
     edge_allow_bullish_fallback: bool = Field(default=os.getenv("EDGE_ALLOW_BULLISH_FALLBACK", "false").lower() == "true")
@@ -438,7 +428,6 @@ class BotConfig(BaseModel):
     # P2: Risk Management Parameters (env-overridable)
     # ========================================================================
     # Dynamic R:R based on ATR (target R:R multiplier for TP distance)
-    target_rr_mult: float = Field(default=float(os.getenv("TARGET_RR_MULT", "2.0")))
     # Position scaling 2% risk fixed dollar (min_risk_per_trade = 0.02)
     min_risk_per_trade: float = Field(default=float(os.getenv("MIN_RISK_PER_TRADE", "0.02")))
     # Fixed dollar risk cap for scaling (e.g., $50 per trade)

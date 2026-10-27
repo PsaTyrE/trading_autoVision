@@ -384,7 +384,7 @@ OUTPUT IN STRICT JSON ONLY, adhering exactly to this schema:
                     text = re.sub(r"^```\s*", "", text)
                     text = re.sub(r"\s*```$", "", text)
 
-                    data = json.loads(text)
+                    data = self._loads_lenient(text)
                     return TradeSignal(**data)
                 except Exception as e:
                     last_err = e

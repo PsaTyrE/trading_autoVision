@@ -389,10 +389,9 @@ class HybridConsensusEngine:
         # --- CASE B0: FOREX FACTORY RED NEWS GUARD (Macro Volatility Protection) ---
         news_guard = snapshot.get("news_guard", {}) if isinstance(snapshot.get("news_guard"), dict) else {}
         if news_guard.get("is_danger"):
-            expl = f"[FOREX FACTORY RED NEWS GUARD] {news_guard.get('caution_reason')}. Sistem otomatis membatasi exposure ke DEFENSIVE GRID ketat untuk mencegah guncangan berita macro."
-            defensive_sl = round(price * (1.0 - config.min_stop_loss_pct), 4) if final_sl <= 0 else max(final_sl, round(price * (1.0 - config.min_stop_loss_pct), 4))
+            expl = f"[FOREX FACTORY RED NEWS GUARD] {news_guard.get('caution_reason')}. Menahan order baru (HOLD) untuk proteksi modal dari guncangan berita macro."
             return ConsensusDecision(
-                action="LONG",
+                action="HOLD",
                 status="DEFENSIVE_GRID",
                 confidence_pct=min(55, int((quant.score + ai_conf_pct) / 2)),
                 stop_loss=defensive_sl,
