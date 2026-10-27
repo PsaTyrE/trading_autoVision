@@ -48,7 +48,8 @@ class MultiAnalystEngine:
         self.base_engine = base_engine  # Original AIAnalyzer instance
         self.debate_timeout = float(os.getenv("DEBATE_TIMEOUT", "30"))
         self.max_api_cost_per_debate = float(os.getenv("MAX_DEBATE_COST_USD", "0.50"))
-        self.decision_log_dir = "/home/pi/latihan/logs/debate"
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.decision_log_dir = os.getenv("DEBATE_LOG_DIR", os.path.join(base_dir, "logs", "debate"))
         os.makedirs(self.decision_log_dir, exist_ok=True)
         self._cost_tracker = []
 
@@ -207,15 +208,9 @@ Output ONLY valid JSON:
                 "quant_math_evaluation": snap.get("quant_math_evaluation", {}),
             }
 
-            # Override prompt for this analyst
-            import sys
-            import io
-            old_stdout = sys.stdout
-            sys.stdout = io.StringIO()
-
-            signal = analyzer.analyze_market(minimal_snap)
-
-            sys.stdout = old_stdout
+            import contextlib, io
+            with contextlib.redirect_stdout(io.StringIO()):
+                signal = analyzer.analyze_market(minimal_snap)
 
             # Extract from base signal, but adapt to analyst type
             return AnalystVote(
@@ -280,11 +275,9 @@ Output ONLY valid JSON:
         - Dissenting opinion logged
         """
         proposed = snap.get("action", "HOLD")
-        vote_actions = [v.action for v in votes]
-
-        # Count agreement with proposed
-        agree_count = sum(1 for v in vote_actions if v.action == proposed and proposed != "HOLD")
-        hold_votes = sum(1 for v in vote_actions if v.action == "HOLD")
+        # Count agreement with proposed directly on votes objects
+        agree_count = sum(1 for v in votes if v.action == proposed and proposed != "HOLD")
+        hold_votes = sum(1 for v in votes if v.action == "HOLD")
 
         # Decision logic
         if hold_votes > 0:

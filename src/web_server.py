@@ -90,9 +90,6 @@ def get_status(quote: Optional[str] = None):
                     bot_manager.available_balance = config.paper_initial_balance
     return bot_manager.get_state()
 
-class SwitchModeRequest(BaseModel):
-    mode: str
-
 class SwitchQuoteAssetRequest(BaseModel):
     quote_asset: str
 

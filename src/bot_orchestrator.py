@@ -31,7 +31,8 @@ class BotOrchestrator:
         if config.trading_mode == "paper":
             return self.paper_trader.get_balance()
         else:
-            return self.live_trader.get_balance()
+            bal = self.live_trader.get_balance()
+            return float(bal.get("free", 0.0) if isinstance(bal, dict) else (bal or 0.0))
 
     def get_open_positions_count(self) -> int:
         if config.trading_mode == "paper":
@@ -154,8 +155,9 @@ class BotOrchestrator:
                     f"${pos['tp']:.4f}"
                 )
         else:
-            balance = self.live_trader.get_balance()
-            console.print(f"💰 Available Binance Futures Balance: [bold green]${balance:.2f} USDT[/]")
+            bal_info = self.live_trader.get_balance()
+            bal_val = float(bal_info.get("free", 0.0) if isinstance(bal_info, dict) else (bal_info or 0.0))
+            console.print(f"💰 Available Binance Futures Balance: [bold green]${bal_val:.2f} USDT[/]")
             positions = self.live_trader.get_open_positions()
             for pos in positions:
                 pnl_color = "green" if pos["unrealized_pnl"] >= 0 else "red"

@@ -80,8 +80,12 @@ class ForexFactoryNewsSentinel:
                     content = resp.read().decode("utf-8")
                     reader = csv.DictReader(io.StringIO(content))
                     parsed = []
-                    # Eastern Time is UTC-4 in summer/fall (EDT) or UTC-5 in winter (EST)
-                    tz_edt = timezone(timedelta(hours=-4))
+                    try:
+                        from zoneinfo import ZoneInfo
+                        tz_eastern = ZoneInfo("America/New_York")
+                    except Exception:
+                        tz_eastern = timezone(timedelta(hours=-4))
+
                     for row in reader:
                         title = row.get("Title", "").strip()
                         country = row.get("Country", "").strip().upper()
@@ -95,7 +99,7 @@ class ForexFactoryNewsSentinel:
                             # e.g., '09-27-2026 11:50pm'
                             if date_str and time_str and time_str.lower() not in ["all day", "tentative"]:
                                 dt = datetime.strptime(f"{date_str} {time_str}", "%m-%d-%Y %I:%M%p")
-                                dt_utc = dt.replace(tzinfo=tz_edt).astimezone(timezone.utc)
+                                dt_utc = dt.replace(tzinfo=tz_eastern).astimezone(timezone.utc)
                                 dt_iso = dt_utc.isoformat()
                         except Exception as e:
                             logger.debug(f"News date parse skipped: {e}")

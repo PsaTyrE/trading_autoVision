@@ -1,3 +1,4 @@
+import threading
 import time
 import ccxt
 import pandas as pd
@@ -87,6 +88,7 @@ class MarketScanner:
     Scans Binance Futures pairs to identify coins with strong BULLISH momentum.
     Includes in-memory TTL caching (60s) to prevent repetitive API hammering and page lag.
     """
+    _cache_lock = threading.Lock()
     _cache_data: List[Dict[str, Any]] = []
     _cache_time: float = 0.0
     _cache_bullish_map: Dict[str, Any] = {}
