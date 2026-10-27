@@ -42,7 +42,7 @@ def main():
             sig = S.signal(f, -2)
             name = sym.split("/")[0]
             if sig:
-                sigs.append(f"{name} {sig['side'].upper()} volR {vr:.2f}")
+                sigs.append(f"{name} {sig[0].upper()} volR {vr:.2f}")
             rows.append((name, vr, sqz))
         except Exception as e:  # one bad pair must not kill the digest
             rows.append((sym.split("/")[0], -1.0, False))
