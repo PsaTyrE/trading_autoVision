@@ -1,5 +1,6 @@
 from typing import Tuple, Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timezone
+import math
 from src.config import config
 from src.ai_analyzer import TradeSignal
 
@@ -52,30 +53,40 @@ class RiskManager:
         if signal.confidence < config.min_ai_confidence:
             return False, f"AI confidence ({signal.confidence:.2f}) below threshold ({config.min_ai_confidence:.2f})", {}
 
-        # 5. Risk-to-Reward Ratio Check
-        if signal.risk_reward_ratio < config.min_risk_reward_ratio:
-            return False, f"Risk-to-Reward ratio ({signal.risk_reward_ratio:.2f}) below minimum ({config.min_risk_reward_ratio:.2f})", {}
-
-        # 6. Directional SL / TP Logic Validation
+        # 5. Guard None and Non-finite values
         entry = signal.suggested_entry
         sl = signal.stop_loss
         tp = signal.take_profit_1
 
+        if None in (entry, sl, tp):
+            return False, f"Missing critical price levels: entry={entry}, sl={sl}, tp={tp}", {}
+
+        if not all(isinstance(x, (int, float)) and math.isfinite(x) for x in (entry, sl, tp)):
+            return False, "Price levels must be valid finite numbers", {}
+
+        # 6. Directional SL / TP Logic Validation & Real Mathematical RR Check
         if signal.action == "LONG":
             if sl >= entry:
                 return False, f"Invalid LONG setup: Stop-Loss ({sl}) must be below Entry ({entry})", {}
             if tp <= entry:
                 return False, f"Invalid LONG setup: Take-Profit ({tp}) must be above Entry ({entry})", {}
             loss_per_unit = entry - sl
+            gain_per_unit = tp - entry
         else: # SHORT
             if sl <= entry:
                 return False, f"Invalid SHORT setup: Stop-Loss ({sl}) must be above Entry ({entry})", {}
             if tp >= entry:
                 return False, f"Invalid SHORT setup: Take-Profit ({tp}) must be below Entry ({entry})", {}
             loss_per_unit = sl - entry
+            gain_per_unit = entry - tp
 
         if loss_per_unit <= 0:
             return False, "Calculated loss per unit is non-positive", {}
+
+        # Real mathematical RR calculation (never trust AI claimed RR alone)
+        real_rr = gain_per_unit / loss_per_unit
+        if real_rr < config.min_risk_reward_ratio:
+            return False, f"Real mathematical R:R ({real_rr:.2f}) below minimum ({config.min_risk_reward_ratio:.2f})", {}
 
         # 7. Position Sizing (Fixed Fractional Risk)
         # Risk capital = e.g., 2% of total portfolio
@@ -112,7 +123,8 @@ class RiskManager:
             "leverage": config.leverage,
             "risk_amount": round(target_quantity * loss_per_unit, 2),
             "risk_amount_usdt": round(target_quantity * loss_per_unit, 2),
-            "risk_pct": round((target_quantity * loss_per_unit / max(0.01, portfolio_balance)) * 100, 2)
+            "risk_pct": round((target_quantity * loss_per_unit / max(0.01, portfolio_balance)) * 100, 2),
+            "real_risk_reward_ratio": round(real_rr, 2)
         }
 
         return True, "Risk criteria satisfied", sizing_details

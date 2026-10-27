@@ -343,7 +343,7 @@ class BotConfig(BaseModel):
     tp_atr_mult: float = Field(default=float(os.getenv("TP_ATR_MULT", "1.8")))
     # Fallback confidences (avoid fabricating when AI output is unusable)
     ai_default_confidence: float = Field(default=float(os.getenv("AI_DEFAULT_CONFIDENCE", "0.65")))
-    fallback_ai_confidence: float = Field(default=float(os.getenv("FALLBACK_AI_CONFIDENCE", "0.78")))
+    fallback_ai_confidence: float = Field(default=float(os.getenv("FALLBACK_AI_CONFIDENCE", "0.60")))
     # If AI omits confidence, force HOLD instead of injecting a fabricated value
     ai_missing_confidence_hold: bool = Field(default=os.getenv("AI_MISSING_CONFIDENCE_HOLD", "true").lower() == "true")
     # Net-of-cost modelling injected into the AI prompt

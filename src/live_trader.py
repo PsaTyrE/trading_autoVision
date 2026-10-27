@@ -19,7 +19,7 @@ class BinanceFuturesTrader:
         if is_testnet is not None:
             self.is_testnet = is_testnet
         else:
-            self.is_testnet = (config.trading_mode in ["testnet", "demo", "paper"])
+            self.is_testnet = (config.trading_mode != "live")
 
         # Dynamically route credentials: Use LIVE credentials if is_testnet is False, else DEMO credentials
         if self.is_testnet:
