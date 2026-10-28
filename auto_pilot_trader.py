@@ -557,6 +557,17 @@ def scan_and_enter(t):
             _sd = strategy.SL_ATR * meta["atr"]
             _sl_floor = price - _sd if side_str == "LONG" else price + _sd
 
+            # --- HARD ORCHESTRATOR VALIDATION (NO CHILLED ENTRY / NO TRAP) ---
+            if _smc_trap:
+                log(f"ORCHESTRATOR HARD VETO: {sym} rejected due to SMC trap ({_smc_sweep})")
+                continue
+            if side_str == "LONG" and _smc_sweep == "bearish_liquidity_sweep":
+                log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - sweep high rejection detected")
+                continue
+            if side_str == "SHORT" and _smc_sweep == "bullish_liquidity_sweep":
+                log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - sweep low rejection detected")
+                continue
+
             snap = {
                 "symbol": sym, "current_price": price, "action": side_str,
                 "trend": "UPTREND" if meta.get("trend_up") else "DOWNTREND",
