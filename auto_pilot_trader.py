@@ -573,20 +573,31 @@ def scan_and_enter(t):
                 log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - sweep low rejection detected")
                 continue
 
-            # HARD FILTER: DILARANG BELI DI PUCUK (RSI Overbought / Di Luar Bollinger Bands)
+            # HARD FILTER: DILARANG BELI DI PUCUK (RSI Overbought / Di Luar Bollinger Bands / Zone Filter)
             if side_str == "LONG":
-                if _rsi >= 66.0:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - RSI overbought ({_rsi:.1f} >= 66.0) DILARANG BELI DI PUCUK")
+                # 1. RSI batas ketat 58.0 (di atas 58 sudah zona panas)
+                if _rsi >= 58.0:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - RSI overextended ({_rsi:.1f} >= 58.0) DILARANG BELI DI PUCUK")
                     continue
-                if _bbu and price >= float(_bbu) * 0.998:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Price near/above Upper Bollinger Band (${price} >= ${_bbu}) DILARANG BELI DI PUCUK")
+                # 2. Bollinger Band ceiling: wajib minimal 1.5% di bawah BB_UP (dilarang mepet upper band)
+                if _bbu and price >= float(_bbu) * 0.985:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Price too close to Upper Bollinger Band (${price} >= {float(_bbu)*0.985:.4f}) DILARANG BELI DI PUCUK")
+                    continue
+                # 3. Bar close juga tidak boleh di atas BB_UP * 0.985
+                _bar_close = float(meta.get("close", 0.0))
+                if _bbu and _bar_close >= float(_bbu) * 0.985:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Bar close too high near Upper Bollinger Band (${_bar_close} >= {float(_bbu)*0.985:.4f}) DILARANG BELI DI PUCUK")
                     continue
             elif side_str == "SHORT":
-                if _rsi <= 34.0:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - RSI oversold ({_rsi:.1f} <= 34.0) DILARANG SELL DI DASAR")
+                if _rsi <= 42.0:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - RSI oversold ({_rsi:.1f} <= 42.0) DILARANG SELL DI DASAR")
                     continue
-                if _bbl and price <= float(_bbl) * 1.002:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Price near/below Lower Bollinger Band (${price} <= ${_bbl}) DILARANG SELL DI DASAR")
+                if _bbl and price <= float(_bbl) * 1.015:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Price too close to Lower Bollinger Band (${price} <= {float(_bbl)*1.015:.4f}) DILARANG SELL DI DASAR")
+                    continue
+                _bar_close = float(meta.get("close", 0.0))
+                if _bbl and _bar_close <= float(_bbl) * 1.015:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Bar close too low near Lower Bollinger Band (${_bar_close} <= {float(_bbl)*1.015:.4f}) DILARANG SELL DI DASAR")
                     continue
 
             snap = {
