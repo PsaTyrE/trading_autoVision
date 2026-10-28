@@ -106,7 +106,7 @@ class MultiAnalystEngine:
         if proposed == "LONG":
             if vr < 1.0:
                 return AnalystVote(analyst="technical", action="HOLD", confidence=0.85, reason=f"Low breakout volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
-            if rsi >= 75:
+            if rsi >= 66:
                 return AnalystVote(analyst="technical", action="HOLD", confidence=0.88, reason=f"RSI overextended ({rsi:.1f} >= 75)", risks=["overbought"])
             if "BEARISH" in vwap_status:
                 return AnalystVote(analyst="technical", action="HOLD", confidence=0.80, reason="Price below VWAP", risks=["below vwap"])
@@ -114,7 +114,7 @@ class MultiAnalystEngine:
         elif proposed == "SHORT":
             if vr < 1.0:
                 return AnalystVote(analyst="technical", action="HOLD", confidence=0.85, reason=f"Low breakdown volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
-            if rsi <= 25:
+            if rsi <= 34:
                 return AnalystVote(analyst="technical", action="HOLD", confidence=0.88, reason=f"RSI oversold ({rsi:.1f} <= 25)", risks=["oversold"])
             if "BULLISH" in vwap_status:
                 return AnalystVote(analyst="technical", action="HOLD", confidence=0.80, reason="Price above VWAP", risks=["above vwap"])
@@ -144,10 +144,10 @@ class MultiAnalystEngine:
         vr = float(indicators.get("volume_vs_average", 1.0))
         bm_pct = float(snap.get("breakout_margin_pct", 0.0))
 
-        if vr >= 3.0:
+        if vr >= 2.4:
             return AnalystVote(analyst="sentiment", action="HOLD", confidence=0.85, reason=f"Volume climax warning ({vr:.2f}x). Extreme volume signals exhaustion.", risks=["climax"])
-        if bm_pct > 3.0:
-            return AnalystVote(analyst="sentiment", action="HOLD", confidence=0.90, reason=f"Chasing warning: price already {bm_pct:.2f}% beyond breakout level.", risks=["chasing"])
+        if bm_pct > 1.2:
+            return AnalystVote(analyst="sentiment", action="HOLD", confidence=0.90, reason=f"Chasing warning: price already {bm_pct:.2f}% beyond breakout level (anti-chasing pucuk).", risks=["chasing"])
 
         action = proposed if proposed in ("LONG", "SHORT") else "HOLD"
         return AnalystVote(analyst="sentiment", action=action, confidence=0.80, reason="Sentiment healthy, no climax or excessive chasing.", risks=[])

@@ -562,7 +562,7 @@ def scan_and_enter(t):
             _sd = strategy.SL_ATR * meta["atr"]
             _sl_floor = price - _sd if side_str == "LONG" else price + _sd
 
-            # --- HARD ORCHESTRATOR VALIDATION (NO CHILLED ENTRY / NO TRAP) ---
+            # --- HARD ORCHESTRATOR VALIDATION (ANTI-PUCUK & ANTI-TRAP MUTLAK) ---
             if _smc_trap:
                 log(f"ORCHESTRATOR HARD VETO: {sym} rejected due to SMC trap ({_smc_sweep})")
                 continue
@@ -572,6 +572,22 @@ def scan_and_enter(t):
             if side_str == "SHORT" and _smc_sweep == "bullish_liquidity_sweep":
                 log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - sweep low rejection detected")
                 continue
+
+            # HARD FILTER: DILARANG BELI DI PUCUK (RSI Overbought / Di Luar Bollinger Bands)
+            if side_str == "LONG":
+                if _rsi >= 66.0:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - RSI overbought ({_rsi:.1f} >= 66.0) DILARANG BELI DI PUCUK")
+                    continue
+                if _bbu and price >= float(_bbu) * 0.998:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Price near/above Upper Bollinger Band (${price} >= ${_bbu}) DILARANG BELI DI PUCUK")
+                    continue
+            elif side_str == "SHORT":
+                if _rsi <= 34.0:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - RSI oversold ({_rsi:.1f} <= 34.0) DILARANG SELL DI DASAR")
+                    continue
+                if _bbl and price <= float(_bbl) * 1.002:
+                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Price near/below Lower Bollinger Band (${price} <= ${_bbl}) DILARANG SELL DI DASAR")
+                    continue
 
             snap = {
                 "symbol": sym, "current_price": price, "action": side_str,
