@@ -59,7 +59,7 @@ JOURNAL = os.getenv("JOURNAL_FILE", os.path.join(BASE_DIR, "trade_log.csv"))
 CLOSED = os.getenv("CLOSED_FILE", os.path.join(BASE_DIR, "trade_closed.csv"))
 DAILY_CAP_SEC = int(os.getenv("DAILY_CAP_SEC", "86400"))
 DAILY_MAX = int(os.getenv("MAX_DAILY_ENTRIES", "3"))
-RISK_USDT = float(os.getenv("RISK_USDT", "1.90"))
+RISK_USDT = float(os.getenv("RISK_USDT", "0.85"))
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 MIN_NOTIONAL = 5.0
 RISK_MAX = float(os.getenv("RISK_MAX_USDT", str(RISK_USDT * 1.5)))
@@ -266,8 +266,13 @@ def manage_open_positions(t):
         lock_sl = None
         if r_dist > 0:
             if gain >= r_dist * 2.0:
-                lock_sl = round(cur_price - r_dist * 0.75, dec) if side == "LONG" else round(cur_price + r_dist * 0.75, dec)
-            elif gain >= r_dist * 1.0:
+                # Lock at least +1.25R profit when hitting +2.0R
+                lock_sl = round(entry + r_dist * 1.25, dec) if side == "LONG" else round(entry - r_dist * 1.25, dec)
+            elif gain >= r_dist * 1.2:
+                # Lock +0.5R profit once gain crosses +1.2R
+                lock_sl = round(entry + r_dist * 0.5, dec) if side == "LONG" else round(entry - r_dist * 0.5, dec)
+            elif gain >= r_dist * 0.8:
+                # Protect capital: Move to Break-Even (entry) once gain reaches +0.8R
                 lock_sl = round(entry * 1.001, dec) if side == "LONG" else round(entry * 0.999, dec)
 
         log(f"HB {symbol} {side} qty {qty} px {cur_price} pnl {pnl_pct*100:+.2f}% gainR {gain/r_dist if r_dist else 0:.2f} sl {cur_sl or 0}")
@@ -284,14 +289,14 @@ def manage_open_positions(t):
             if not [o for o in _oo if str(o.get("side") or "").lower() == _cs]:
                 if abs(qty - float(trade_meta.get("qty") or 0)) < 1e-9:
                     try:
-                        _q1 = float(t.exchange.amount_to_precision(symbol, qty * 0.4))
-                        _q2 = float(t.exchange.amount_to_precision(symbol, qty * 0.4))
+                        _q1 = float(t.exchange.amount_to_precision(symbol, qty * 0.60))
+                        _q2 = float(t.exchange.amount_to_precision(symbol, qty * 0.25))
                         with contextlib.redirect_stdout(sys.stderr):
                             if _q1 > 0:
                                 t.place_limit_order(symbol, _cs, _q1, float(trade_meta["tp1"]), reduce_only=True)
                             if _q2 > 0:
                                 t.place_limit_order(symbol, _cs, _q2, float(trade_meta["tp2"]), reduce_only=True)
-                        log(f"TP RE-ARM {symbol}: {_q1} (40%) @ {trade_meta['tp1']} | {_q2} (40%) @ {trade_meta['tp2']} | runner 20% trailing")
+                        log(f"TP RE-ARM {symbol}: {_q1} (60%) @ {trade_meta['tp1']} | {_q2} (25%) @ {trade_meta['tp2']} | runner 15% trailing")
                     except Exception as te:
                         log(f"TP re-arm failed {symbol}: {te}")
 
@@ -426,7 +431,7 @@ def scan_and_enter(t):
         sd = strategy.SL_ATR * meta["atr"]
         if sd <= 0:
             return False
-        _live_risk = max(RISK_USDT, round(equity * 0.035, 2))
+        _live_risk = min(RISK_USDT, round(equity * 0.02, 2))
         raw_q = _live_risk / sd
         m = t.exchange.market(sym)
         _lim = m.get("limits") or {}
@@ -494,7 +499,7 @@ def scan_and_enter(t):
             continue
 
         try:
-            dyn_risk = max(RISK_USDT, round(equity * 0.035, 2))
+            dyn_risk = min(RISK_USDT, round(equity * 0.02, 2))
             qty = float(t.exchange.amount_to_precision(resolved, dyn_risk / sl_dist))
         except Exception as e:
             log(f"Skip {sym}: qty precision ({e})")
@@ -695,16 +700,16 @@ def scan_and_enter(t):
                 pass
             continue
 
-        # 40% TP1, 40% TP2, 20% Runner
+        # 60% TP1, 25% TP2, 15% Runner (Frontloaded profit taking)
         try:
             with contextlib.redirect_stdout(sys.stderr):
-                tp1_qty = float(t.exchange.amount_to_precision(resolved, qty * 0.4))
-                tp2_qty = float(t.exchange.amount_to_precision(resolved, qty * 0.4))
+                tp1_qty = float(t.exchange.amount_to_precision(resolved, qty * 0.60))
+                tp2_qty = float(t.exchange.amount_to_precision(resolved, qty * 0.25))
                 if tp1_qty > 0:
                     t.place_limit_order(sym, close_side, tp1_qty, tp1_price, reduce_only=True)
                 if tp2_qty > 0:
                     t.place_limit_order(sym, close_side, tp2_qty, tp2_price, reduce_only=True)
-                log(f"LADDER PLACED {sym}: TP1 {tp1_qty} @ {tp1_price} (40%) | TP2 {tp2_qty} @ {tp2_price} (40%) | Runner {round(qty - tp1_qty - tp2_qty, 4)} (20%)")
+                log(f"LADDER PLACED {sym}: TP1 {tp1_qty} @ {tp1_price} (60%) | TP2 {tp2_qty} @ {tp2_price} (25%) | Runner {round(qty - tp1_qty - tp2_qty, 4)} (15%)")
         except Exception as te:
             log(f"TP placement error {sym}: {te}")
 
