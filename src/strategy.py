@@ -138,9 +138,18 @@ def signal(d, i=-1):
         return None
     if d.v.iloc[i] <= d.vma.iloc[i] * MIN_VOL_RATIO:
         return None
+    # SMC Filter: Dilarang BUY di pucuk (bearish sweep) atau SELL di dasar (bullish sweep)
+    # Wajib ada konfirmasi bias SMC (FVG atau liquidity sweep)
+    fvg = str(d.smc_fvg.iloc[i])
+    sweep = str(d.smc_sweep.iloc[i])
+
     if d.c.iloc[i] > d.hh.iloc[i]:
+        if sweep == "bearish_liquidity_sweep":
+            return None  # Sweep pucuk dan reject, jangan beli pucuk!
         side = "BUY"
     elif d.c.iloc[i] < d.ll.iloc[i]:
+        if sweep == "bullish_liquidity_sweep":
+            return None  # Sweep lembah dan reject, jangan sell dasar!
         side = "SELL"
     else:
         return None
