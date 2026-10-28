@@ -313,7 +313,8 @@ Output ONLY valid JSON:
     def _log_decision(self, snap: Dict[str, Any], result: DebateResult, duration: float) -> str:
         """Write decision log to JSON file."""
         ts = int(time.time())
-        filename = f"debate_{snap.get('symbol', 'unknown')}_{ts}.json"
+        sym_clean = snap.get('symbol', 'unknown').replace('/', '_').replace(':', '_')
+        filename = f"debate_{sym_clean}_{ts}.json"
         filepath = os.path.join(self.decision_log_dir, filename)
 
         log_entry = {
