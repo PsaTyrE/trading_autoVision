@@ -96,102 +96,61 @@ class MultiAnalystEngine:
             return self._fallback_to_base(snapshot, error=str(e))
 
     def _analyze_technical(self, snap: Dict[str, Any]) -> AnalystVote:
-        """Technical analyst: patterns, volume, breakout confirmation."""
+        """Technical analyst: focuses strictly on trend, momentum, and volume."""
         indicators = snap.get("indicators", {})
-        confluence = snap.get("confluence", {})
-        quant = snap.get("quant_math_evaluation", {})
+        proposed = snap.get("action", "HOLD")
+        vr = float(indicators.get("volume_vs_average", 1.0))
+        rsi = float(indicators.get("rsi_14", 50.0))
+        vwap_status = str(indicators.get("vwap_status", ""))
 
-        prompt = f"""You are a Crypto Technical Analyst specializing in 4H compression breakouts.
-
-SNAPSHOT:
-- Symbol: {snap.get('symbol')}
-- Current Price: ${snap.get('current_price', 0):.4f}
-- Action: {snap.get('action', 'UNKNOWN')}
-- Trend: {indicators.get('trend', 'NEUTRAL')}
-- RSI: {indicators.get('rsi_14', 50):.1f} ({snap.get('indicators', {}).get('rsi_condition', 'NEUTRAL')})
-- MACD: {indicators.get('macd', {}).get('status', 'NEUTRAL')}
-- Volume Ratio: {indicators.get('volume_vs_average', 1.0):.2f}x
-- ATR: {indicators.get('atr_14', 0):.6f}
-- VWAP: ${indicators.get('vwap', 0):.4f}
-
-QUANT MATH:
-- Score: {quant.get('score', 50)}/100
-- Breakout Margin: {quant.get('breakout_margin_pct', 0):.3f}%
-- Volatility: {quant.get('volatility_pct', 0):.3f}%
-
-EVALUATE:
-1. Is the breakout confirmed by volume? (vol_ratio >= 1.0)
-2. Is RSI in healthy zone? (not DANGER)
-3. Are MACD and Trend aligned?
-4. Is price above/below VWAP correctly?
-
-Output ONLY valid JSON:
-{{"action": "LONG"|"SHORT"|"HOLD", "confidence": 0.0-1.0, "reason": "brief technical thesis", "risks": ["risk1", "risk2"]}}
-"""
-
-        return self._call_analyst(prompt, "technical", snap)
+        if proposed == "LONG":
+            if vr < 1.0:
+                return AnalystVote(analyst="technical", action="HOLD", confidence=0.85, reason=f"Low breakout volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
+            if rsi >= 75:
+                return AnalystVote(analyst="technical", action="HOLD", confidence=0.88, reason=f"RSI overextended ({rsi:.1f} >= 75)", risks=["overbought"])
+            if "BEARISH" in vwap_status:
+                return AnalystVote(analyst="technical", action="HOLD", confidence=0.80, reason="Price below VWAP", risks=["below vwap"])
+            return AnalystVote(analyst="technical", action="LONG", confidence=0.86, reason=f"Technical momentum confirmed: Vol {vr:.2f}x, RSI {rsi:.1f}, above VWAP", risks=[])
+        elif proposed == "SHORT":
+            if vr < 1.0:
+                return AnalystVote(analyst="technical", action="HOLD", confidence=0.85, reason=f"Low breakdown volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
+            if rsi <= 25:
+                return AnalystVote(analyst="technical", action="HOLD", confidence=0.88, reason=f"RSI oversold ({rsi:.1f} <= 25)", risks=["oversold"])
+            if "BULLISH" in vwap_status:
+                return AnalystVote(analyst="technical", action="HOLD", confidence=0.80, reason="Price above VWAP", risks=["above vwap"])
+            return AnalystVote(analyst="technical", action="SHORT", confidence=0.86, reason=f"Technical breakdown confirmed: Vol {vr:.2f}x, RSI {rsi:.1f}, below VWAP", risks=[])
+        return AnalystVote(analyst="technical", action="HOLD", confidence=0.5, reason="No active setup", risks=[])
 
     def _analyze_macro(self, snap: Dict[str, Any]) -> AnalystVote:
-        """Macro analyst: BTC dominance, funding, correlation risk."""
-        symbol = snap.get("symbol", "")
-        cluster = snap.get("cluster", "MISC")
+        """SMC & Price Structure Analyst: evaluates liquidity sweeps, traps, and extremes."""
+        indicators = snap.get("indicators", {})
+        proposed = snap.get("action", "HOLD")
+        sweep = str(indicators.get("smc_liquidity_sweep", "none"))
 
-        prompt = f"""You are a Crypto Macro Analyst focused on systematic risk.
-
-CONTEXT:
-- Symbol: {symbol}
-- Cluster: {cluster}
-- BTC Price: ~$80,690 (check heatmap: support 79,200-79,400 yellow wall, resistance 81,000-81,400 green shelf)
-- Current Price: ${snap.get('current_price', 0):.4f}
-- Proposed Action: {snap.get('action', 'UNKNOWN')}
-
-MACRO CHECKLIST:
-1. BTC Dominance: Is BTC leading or following? (check if alt has independent strength)
-2. Funding Rates: Are we in positive (longs paying) or negative (shorts paying) regime?
-3. Correlation Risk: If {cluster} cluster already has positions, avoid adding correlation exposure
-4. Liquidation Heatmap: Where is price relative to major liq clusters?
-
-DECISION RULES:
-- If cluster already occupied → HOLD (correlation guard)
-- If BTC dumping hard → VETO alt LONG
-- If BTC consolidating → OK to proceed with alt
-- If funding extremely positive → caution on LONG (crowded trade)
-
-Output ONLY valid JSON:
-{{"action": "LONG"|"SHORT"|"HOLD", "confidence": 0.0-1.0, "reason": "macro thesis", "risks": ["risk1", "risk2"]}}
-"""
-
-        return self._call_analyst(prompt, "macro", snap)
+        if proposed == "LONG":
+            if sweep == "bearish_liquidity_sweep":
+                return AnalystVote(analyst="macro", action="HOLD", confidence=0.95, reason="BEAR VETO: Bearish liquidity sweep (top wick rejection) detected. High risk of bull trap!", risks=["bull trap", "liquidity sweep"])
+            return AnalystVote(analyst="macro", action="LONG", confidence=0.82, reason="SMC structure clear, no upper liquidity sweep trap.", risks=[])
+        elif proposed == "SHORT":
+            if sweep == "bullish_liquidity_sweep":
+                return AnalystVote(analyst="macro", action="HOLD", confidence=0.95, reason="BULL VETO: Bullish liquidity sweep (bottom wick rejection) detected. High risk of bear trap!", risks=["bear trap", "liquidity sweep"])
+            return AnalystVote(analyst="macro", action="SHORT", confidence=0.82, reason="SMC structure clear, no lower liquidity sweep trap.", risks=[])
+        return AnalystVote(analyst="macro", action="HOLD", confidence=0.5, reason="Macro neutral", risks=[])
 
     def _analyze_sentiment(self, snap: Dict[str, Any]) -> AnalystVote:
-        """Sentiment analyst: news mood, social chatter (placeholder logic)."""
-        symbol = snap.get("symbol", "")
-        vol_ratio = snap.get("indicators", {}).get("volume_vs_average", 1.0)
-        score = snap.get("quant_math_evaluation", {}).get("score", 50)
+        """Exhaustion & Climax Analyst: detects FOMO chasing and exhaustion volume."""
+        indicators = snap.get("indicators", {})
+        proposed = snap.get("action", "HOLD")
+        vr = float(indicators.get("volume_vs_average", 1.0))
+        bm_pct = float(snap.get("breakout_margin_pct", 0.0))
 
-        prompt = f"""You are a Crypto Sentiment Analyst evaluating market mood.
+        if vr >= 3.0:
+            return AnalystVote(analyst="sentiment", action="HOLD", confidence=0.85, reason=f"Volume climax warning ({vr:.2f}x). Extreme volume signals exhaustion.", risks=["climax"])
+        if bm_pct > 3.0:
+            return AnalystVote(analyst="sentiment", action="HOLD", confidence=0.90, reason=f"Chasing warning: price already {bm_pct:.2f}% beyond breakout level.", risks=["chasing"])
 
-SNAPSHOT:
-- Symbol: {symbol}
-- Volume Surge: {vol_ratio:.2f}x average (threshold: 0.90)
-- Quant Score: {score}/100
-- Action Proposed: {snap.get('action', 'UNKNOWN')}
-
-SENTIMENT INDICATORS:
-1. Volume Spike: High volume = strong conviction or potential exhaustion?
-2. Score Position: {score} suggests {'strong' if score > 70 else 'moderate' if score > 50 else 'weak'} setup
-3. Breakout Quality: Is this a clean breakout or chasing extended move?
-
-HEURISTICS:
-- vol_ratio >= 2.0 → extreme excitement → possible climax → caution
-- vol_ratio 1.0-2.0 → healthy participation → positive
-- vol_ratio < 1.0 → low interest → weak signal
-
-Output ONLY valid JSON:
-{{"action": "LONG"|"SHORT"|"HOLD", "confidence": 0.0-1.0, "reason": "sentiment thesis", "risks": ["risk1", "risk2"]}}
-"""
-
-        return self._call_analyst(prompt, "sentiment", snap)
+        action = proposed if proposed in ("LONG", "SHORT") else "HOLD"
+        return AnalystVote(analyst="sentiment", action=action, confidence=0.80, reason="Sentiment healthy, no climax or excessive chasing.", risks=[])
 
     def _call_analyst(self, prompt: str, analyst_type: str, snap: Dict[str, Any]) -> AnalystVote:
         """Call AI for single analyst decision with fallback."""
