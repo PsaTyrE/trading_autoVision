@@ -59,11 +59,44 @@ JOURNAL = os.getenv("JOURNAL_FILE", os.path.join(BASE_DIR, "trade_log.csv"))
 CLOSED = os.getenv("CLOSED_FILE", os.path.join(BASE_DIR, "trade_closed.csv"))
 DAILY_CAP_SEC = int(os.getenv("DAILY_CAP_SEC", "86400"))
 DAILY_MAX = int(os.getenv("MAX_DAILY_ENTRIES", "3"))
-RISK_USDT = float(os.getenv("RISK_USDT", "0.85"))
+RISK_USDT = float(os.getenv("RISK_USDT", "0"))  # 0 = auto compounding dari equity live
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 MIN_NOTIONAL = 5.0
-RISK_MAX = float(os.getenv("RISK_MAX_USDT", str(RISK_USDT * 1.5)))
+RISK_MAX = float(os.getenv("RISK_MAX_USDT", "0"))  # 0 = auto (1.6x risk budget)
 MIN_AI_CONF = float(os.getenv("MIN_AI_CONF", "0.85"))
+
+# --- COMPOUNDING RISK LADDER ---
+# Risk USDT dihitung dari equity live, dan persentasenya NAIK bertahap
+# seiring saldo tumbuh. Ini yang bikin growth eksponensial, bukan linear.
+RISK_TIERS = [
+    (0.0,   0.016),   # < $75   -> 1.6% per trade
+    (75.0,  0.020),   # $75+    -> 2.0%
+    (150.0, 0.025),   # $150+   -> 2.5%
+    (300.0, 0.030),   # $300+   -> 3.0%
+    (600.0, 0.035),   # $600+   -> 3.5%
+]
+RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
+
+
+def risk_budget(equity: float) -> float:
+    """Besar risiko (USDT) per trade, dihitung proporsional dari equity live."""
+    eq = float(equity or 0.0)
+    pct = RISK_TIERS[0][1]
+    for thr, p in RISK_TIERS:
+        if eq >= thr:
+            pct = p
+    pct = min(pct, RISK_PCT_CAP)
+    amt = round(eq * pct, 2)
+    if RISK_USDT > 0:
+        amt = min(amt, RISK_USDT)
+    return max(0.30, amt)
+
+
+def risk_max_budget(equity: float) -> float:
+    """Plafon risk setelah bump notional minimum exchange."""
+    if RISK_MAX > 0:
+        return RISK_MAX
+    return max(1.0, round(risk_budget(equity) * 1.6, 2))
 
 # Correlation clustering: max 1 position per cluster to prevent systematic liquidation
 CLUSTERS = {
@@ -400,7 +433,7 @@ def scan_and_enter(t):
                 _f.write(f"{equity:.6f}")
         with open(bp) as _f:
             base = float(_f.read().strip())
-        breaker_threshold = float(os.getenv("CIRCUIT_BREAKER_MAX_LOSS", "5.00"))
+        breaker_threshold = max(float(os.getenv("CIRCUIT_BREAKER_MAX_LOSS", "5.00")), round(equity * 0.10, 2))
         if equity < base - breaker_threshold:
             log(f"CIRCUIT BREAKER: equity ${equity:.2f} < ${base:.2f}-{breaker_threshold:.2f}. Entries halted.")
             return
@@ -431,7 +464,7 @@ def scan_and_enter(t):
         sd = strategy.SL_ATR * meta["atr"]
         if sd <= 0:
             return False
-        _live_risk = min(RISK_USDT, round(equity * 0.02, 2))
+        _live_risk = risk_budget(equity)
         raw_q = _live_risk / sd
         m = t.exchange.market(sym)
         _lim = m.get("limits") or {}
@@ -440,7 +473,7 @@ def scan_and_enter(t):
         floor_notional = max(MIN_NOTIONAL, min_c)
         if raw_q * meta["close"] < floor_notional:
             raw_q = max(raw_q, floor_notional / meta["close"])
-            if raw_q * sd > RISK_MAX:
+            if raw_q * sd > risk_max_budget(equity):
                 return False
         if raw_q < min_q:
             return False
@@ -499,7 +532,7 @@ def scan_and_enter(t):
             continue
 
         try:
-            dyn_risk = min(RISK_USDT, round(equity * 0.02, 2))
+            dyn_risk = risk_budget(equity)
             qty = float(t.exchange.amount_to_precision(resolved, dyn_risk / sl_dist))
         except Exception as e:
             log(f"Skip {sym}: qty precision ({e})")
@@ -520,8 +553,9 @@ def scan_and_enter(t):
                 _raw = math.ceil(_raw / _step) * _step
             bumped = float(t.exchange.amount_to_precision(resolved, _raw))
             bumped_risk = bumped * sl_dist
-            if bumped <= 0 or bumped_risk > RISK_MAX:
-                log(f"Skip {sym}: notional ${notional:.2f} < ${MIN_NOTIONAL}, bump risk ${bumped_risk:.2f} > ${RISK_MAX:.2f}")
+            _rmax = risk_max_budget(equity)
+            if bumped <= 0 or bumped_risk > _rmax:
+                log(f"Skip {sym}: notional ${notional:.2f} < ${MIN_NOTIONAL}, bump risk ${bumped_risk:.2f} > ${_rmax:.2f}")
                 continue
             qty = bumped
             notional = qty * price
