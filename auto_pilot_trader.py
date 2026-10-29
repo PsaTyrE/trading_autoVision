@@ -136,6 +136,13 @@ def save_state(s):
             if _closed:
                 s["closed_syms"] = sorted(_closed)
 
+            _today_norm = time.strftime("%Y-%m-%d")
+            if str(s.get("day_key") or "") != _today_norm:
+                s["day_key"] = _today_norm
+                s["day_entries"] = 0
+            elif str(_disk.get("day_key") or "") == _today_norm:
+                s["day_entries"] = max(int(s.get("day_entries") or 0), int(_disk.get("day_entries") or 0))
+
             _d_at = _disk.get("active_trades") or {}
             _m_at = s.get("active_trades") or {}
             for _k, _v in _d_at.items():
