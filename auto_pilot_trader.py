@@ -78,6 +78,29 @@ RISK_TIERS = [
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
 
 
+def day_pnl_from_income(rows) -> float:
+    """Jumlahkan PnL realisasi hari ini dari income Binance (pnl + fee + funding)."""
+    tot = 0.0
+    for r in (rows or []):
+        try:
+            if str(r.get("incomeType")) in ("REALIZED_PNL", "COMMISSION", "FUNDING_FEE"):
+                tot += float(r.get("income") or 0.0)
+        except Exception:
+            continue
+    return round(tot, 6)
+
+
+def daily_loss_blocked(realized: float, equity: float, pct: float = 0.05) -> bool:
+    """True kalau rugi realisasi hari ini sudah menembus pct dari equity."""
+    try:
+        eq = float(equity)
+        if eq <= 0:
+            return False
+        return float(realized) <= -abs(float(pct) * eq)
+    except Exception:
+        return False
+
+
 def risk_budget(equity: float) -> float:
     """Besar risiko (USDT) per trade, dihitung proporsional dari equity live."""
     eq = float(equity or 0.0)
@@ -136,7 +159,7 @@ def save_state(s):
             if _closed:
                 s["closed_syms"] = sorted(_closed)
 
-            _today_norm = time.strftime("%Y-%m-%d")
+            _today_norm = time.strftime("%Y-%m-%d", time.gmtime())
             if str(s.get("day_key") or "") != _today_norm:
                 s["day_key"] = _today_norm
                 s["day_entries"] = 0
@@ -532,6 +555,19 @@ def scan_and_enter(t):
             return
     except Exception as e:
         log(f"Breaker error: {e}")
+
+    # --- DAILY LOSS CAP (MAX_DAILY_LOSS_PCT, sebelumnya cuma ada di .env tanpa dipakai) ---
+    try:
+        _dlp = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.05"))
+        _utc_mid = (int(time.time()) // 86400) * 86400
+        with contextlib.redirect_stdout(sys.stderr):
+            _inc = t.exchange.fapiPrivateGetIncome({"startTime": _utc_mid * 1000, "limit": 1000})
+        _day_pnl = day_pnl_from_income(_inc)
+        if daily_loss_blocked(_day_pnl, equity, _dlp):
+            log(f"DAILY LOSS CAP: hari ini {_day_pnl:+.2f} USDT <= -{_dlp*100:.0f}% x ${equity:.2f} = {-abs(_dlp*equity):+.2f}. Entry dihentikan sampai 00:00 UTC.")
+            return
+    except Exception as e:
+        log(f"Daily loss cap error: {e}")
 
     # --- MULTI-POSITION CAPACITY CHECK ---
     open_pos = get_open_positions(t)

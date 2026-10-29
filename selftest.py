@@ -78,9 +78,25 @@ raw_pucuk[-1][4] = float(sig[1]["bb_up"]) * 1.01
 d_pucuk = strategy.features(pd.DataFrame(raw_pucuk, columns=["t", "o", "h", "l", "c", "v"]))
 check("anti-pucuk rejects overextended bar", strategy.signal(d_pucuk, -1) is None)
 
+# --- 9. daily loss cap (config di .env yang tadinya mati) ---
+_inc_rows = [
+    {"incomeType": "REALIZED_PNL", "income": "-3.00"},
+    {"incomeType": "COMMISSION", "income": "-0.10"},
+    {"incomeType": "FUNDING_FEE", "income": "-0.05"},
+    {"incomeType": "TRANSFER", "income": "999.00"},   # harus diabaikan
+]
+check("day_pnl sums pnl+fee+funding only", A.day_pnl_from_income(_inc_rows) == -3.15)
+check("day_pnl ignores unrelated income types", A.day_pnl_from_income([{"incomeType": "TRANSFER", "income": "50"}]) == 0.0)
+check("day_pnl handles empty", A.day_pnl_from_income([]) == 0.0)
+check("loss cap trips at -6% of 55", A.daily_loss_blocked(-3.30, 55.0, 0.05) is True)
+check("loss cap allows -2% of 55", A.daily_loss_blocked(-1.10, 55.0, 0.05) is False)
+check("loss cap allows profit", A.daily_loss_blocked(0.75, 55.0, 0.05) is False)
+check("loss cap safe on zero equity", A.daily_loss_blocked(-1.0, 0.0, 0.05) is False)
+check("loss cap exported", hasattr(A, "daily_loss_blocked") and hasattr(A, "day_pnl_from_income"))
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (17/17)")
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 8, 17 + 8))
     sys.exit(0)
