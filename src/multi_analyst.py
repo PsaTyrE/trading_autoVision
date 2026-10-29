@@ -96,7 +96,7 @@ class MultiAnalystEngine:
             return self._fallback_to_base(snapshot, error=str(e))
 
     def _analyze_technical(self, snap: Dict[str, Any]) -> AnalystVote:
-        """Technical analyst: focuses strictly on trend, momentum, and volume."""
+        """Technical analyst: dynamically evaluates trend, momentum, and volume."""
         indicators = snap.get("indicators", {})
         proposed = snap.get("action", "HOLD")
         vr = float(indicators.get("volume_vs_average", 1.0))
@@ -105,20 +105,37 @@ class MultiAnalystEngine:
 
         if proposed == "LONG":
             if vr < 1.0:
-                return AnalystVote(analyst="technical", action="HOLD", confidence=0.85, reason=f"Low breakout volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
-            if rsi >= 66:
-                return AnalystVote(analyst="technical", action="HOLD", confidence=0.88, reason=f"RSI overextended ({rsi:.1f} >= 75)", risks=["overbought"])
+                # Dynamic confidence based on volume deficit
+                conf = round(min(0.95, 0.75 + (1.0 - vr) * 0.25), 2)
+                return AnalystVote(analyst="technical", action="HOLD", confidence=conf, reason=f"Low volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
+            if rsi >= 58.0:
+                # Dynamic confidence based on overbought excess
+                conf = round(min(0.98, 0.80 + (rsi - 58.0) * 0.015), 2)
+                return AnalystVote(analyst="technical", action="HOLD", confidence=conf, reason=f"RSI overextended ({rsi:.1f} >= 58.0)", risks=["overbought"])
             if "BEARISH" in vwap_status:
-                return AnalystVote(analyst="technical", action="HOLD", confidence=0.80, reason="Price below VWAP", risks=["below vwap"])
-            return AnalystVote(analyst="technical", action="LONG", confidence=0.86, reason=f"Technical momentum confirmed: Vol {vr:.2f}x, RSI {rsi:.1f}, above VWAP", risks=[])
+                conf = round(min(0.92, 0.78 + min(0.14, vr * 0.05)), 2)
+                return AnalystVote(analyst="technical", action="HOLD", confidence=conf, reason="Price below VWAP", risks=["below vwap"])
+            
+            # Dynamic agreement confidence based on volume and RSI sweet spot
+            rsi_sweet = max(0.0, 1.0 - abs(rsi - 48.0) / 15.0)
+            conf = round(min(0.95, 0.78 + min(0.12, (vr - 1.0) * 0.1) + rsi_sweet * 0.08), 2)
+            return AnalystVote(analyst="technical", action="LONG", confidence=conf, reason=f"Technical pullback confirmed: Vol {vr:.2f}x, RSI {rsi:.1f}, above VWAP", risks=[])
+
         elif proposed == "SHORT":
             if vr < 1.0:
-                return AnalystVote(analyst="technical", action="HOLD", confidence=0.85, reason=f"Low breakdown volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
-            if rsi <= 34:
-                return AnalystVote(analyst="technical", action="HOLD", confidence=0.88, reason=f"RSI oversold ({rsi:.1f} <= 25)", risks=["oversold"])
+                conf = round(min(0.95, 0.75 + (1.0 - vr) * 0.25), 2)
+                return AnalystVote(analyst="technical", action="HOLD", confidence=conf, reason=f"Low volume ({vr:.2f}x < 1.0x)", risks=["lack of volume"])
+            if rsi <= 42.0:
+                conf = round(min(0.98, 0.80 + (42.0 - rsi) * 0.015), 2)
+                return AnalystVote(analyst="technical", action="HOLD", confidence=conf, reason=f"RSI oversold ({rsi:.1f} <= 42.0)", risks=["oversold"])
             if "BULLISH" in vwap_status:
-                return AnalystVote(analyst="technical", action="HOLD", confidence=0.80, reason="Price above VWAP", risks=["above vwap"])
-            return AnalystVote(analyst="technical", action="SHORT", confidence=0.86, reason=f"Technical breakdown confirmed: Vol {vr:.2f}x, RSI {rsi:.1f}, below VWAP", risks=[])
+                conf = round(min(0.92, 0.78 + min(0.14, vr * 0.05)), 2)
+                return AnalystVote(analyst="technical", action="HOLD", confidence=conf, reason="Price above VWAP", risks=["above vwap"])
+            
+            rsi_sweet = max(0.0, 1.0 - abs(rsi - 52.0) / 15.0)
+            conf = round(min(0.95, 0.78 + min(0.12, (vr - 1.0) * 0.1) + rsi_sweet * 0.08), 2)
+            return AnalystVote(analyst="technical", action="SHORT", confidence=conf, reason=f"Technical pullback confirmed: Vol {vr:.2f}x, RSI {rsi:.1f}, below VWAP", risks=[])
+
         return AnalystVote(analyst="technical", action="HOLD", confidence=0.5, reason="No active setup", risks=[])
 
     def _analyze_macro(self, snap: Dict[str, Any]) -> AnalystVote:
@@ -126,31 +143,42 @@ class MultiAnalystEngine:
         indicators = snap.get("indicators", {})
         proposed = snap.get("action", "HOLD")
         sweep = str(indicators.get("smc_liquidity_sweep", "none"))
+        quant_score = float(snap.get("quant_math_evaluation", {}).get("score", 50.0))
 
         if proposed == "LONG":
             if sweep == "bearish_liquidity_sweep":
-                return AnalystVote(analyst="macro", action="HOLD", confidence=0.95, reason="BEAR VETO: Bearish liquidity sweep (top wick rejection) detected. High risk of bull trap!", risks=["bull trap", "liquidity sweep"])
-            return AnalystVote(analyst="macro", action="LONG", confidence=0.82, reason="SMC structure clear, no upper liquidity sweep trap.", risks=[])
+                return AnalystVote(analyst="macro", action="HOLD", confidence=0.96, reason="BEAR VETO: Bearish liquidity sweep (top wick rejection) detected. High risk of bull trap!", risks=["bull trap", "liquidity sweep"])
+            # Dynamic confidence based on quant confluence
+            conf = round(min(0.94, 0.75 + (quant_score / 100.0) * 0.15), 2)
+            return AnalystVote(analyst="macro", action="LONG", confidence=conf, reason="SMC structure clear, no upper liquidity sweep trap.", risks=[])
+
         elif proposed == "SHORT":
             if sweep == "bullish_liquidity_sweep":
-                return AnalystVote(analyst="macro", action="HOLD", confidence=0.95, reason="BULL VETO: Bullish liquidity sweep (bottom wick rejection) detected. High risk of bear trap!", risks=["bear trap", "liquidity sweep"])
-            return AnalystVote(analyst="macro", action="SHORT", confidence=0.82, reason="SMC structure clear, no lower liquidity sweep trap.", risks=[])
+                return AnalystVote(analyst="macro", action="HOLD", confidence=0.96, reason="BULL VETO: Bullish liquidity sweep (bottom wick rejection) detected. High risk of bear trap!", risks=["bear trap", "liquidity sweep"])
+            conf = round(min(0.94, 0.75 + (quant_score / 100.0) * 0.15), 2)
+            return AnalystVote(analyst="macro", action="SHORT", confidence=conf, reason="SMC structure clear, no lower liquidity sweep trap.", risks=[])
+
         return AnalystVote(analyst="macro", action="HOLD", confidence=0.5, reason="Macro neutral", risks=[])
 
     def _analyze_sentiment(self, snap: Dict[str, Any]) -> AnalystVote:
-        """Exhaustion & Climax Analyst: detects FOMO chasing and exhaustion volume."""
+        """Exhaustion & Climax Analyst: detects FOMO chasing dynamically."""
         indicators = snap.get("indicators", {})
         proposed = snap.get("action", "HOLD")
         vr = float(indicators.get("volume_vs_average", 1.0))
         bm_pct = float(snap.get("breakout_margin_pct", 0.0))
 
         if vr >= 2.4:
-            return AnalystVote(analyst="sentiment", action="HOLD", confidence=0.85, reason=f"Volume climax warning ({vr:.2f}x). Extreme volume signals exhaustion.", risks=["climax"])
+            conf = round(min(0.98, 0.82 + (vr - 2.4) * 0.08), 2)
+            return AnalystVote(analyst="sentiment", action="HOLD", confidence=conf, reason=f"Volume climax warning ({vr:.2f}x). Extreme volume signals exhaustion.", risks=["climax"])
         if bm_pct > 1.2:
-            return AnalystVote(analyst="sentiment", action="HOLD", confidence=0.90, reason=f"Chasing warning: price already {bm_pct:.2f}% beyond breakout level (anti-chasing pucuk).", risks=["chasing"])
+            # Dynamic penalty scaling with how far price has overextended
+            excess = bm_pct - 1.2
+            conf = round(min(0.98, 0.85 + min(0.12, excess * 0.04)), 2)
+            return AnalystVote(analyst="sentiment", action="HOLD", confidence=conf, reason=f"Chasing warning: price already {bm_pct:.2f}% beyond breakout level (anti-chasing pucuk).", risks=["chasing"])
 
         action = proposed if proposed in ("LONG", "SHORT") else "HOLD"
-        return AnalystVote(analyst="sentiment", action=action, confidence=0.80, reason="Sentiment healthy, no climax or excessive chasing.", risks=[])
+        conf = round(min(0.92, 0.76 + min(0.12, vr * 0.05)), 2)
+        return AnalystVote(analyst="sentiment", action=action, confidence=conf, reason="Sentiment healthy, no climax or excessive chasing.", risks=[])
 
     def _call_analyst(self, prompt: str, analyst_type: str, snap: Dict[str, Any]) -> AnalystVote:
         """Call AI for single analyst decision with fallback."""
