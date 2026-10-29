@@ -464,7 +464,7 @@ def scan_and_enter(t):
         sd = strategy.SL_ATR * meta["atr"]
         if sd <= 0:
             return False
-        _live_risk = risk_budget(equity)
+        _live_risk = round(risk_budget(equity) * float(meta.get("risk_mult", 1.0)), 2)
         raw_q = _live_risk / sd
         m = t.exchange.market(sym)
         _lim = m.get("limits") or {}
@@ -479,32 +479,58 @@ def scan_and_enter(t):
             return False
         return True
 
+    # --- MULTI-TIMEFRAME SCAN: 4h arah utama + 1h tambahan peluang ---
+    # 4h = full size. 1h = 60% size, HANYA kalau tren 4h searah (biar nggak lawan arus).
+    TF_PLAN = (("4h", 1.0), ("1h", 0.6))
+
     candidates = []
     for sym in WATCHLIST:
         if sym in occupied_symbols:
             continue
         try:
-            with contextlib.redirect_stdout(sys.stderr):
-                raw = t.exchange.fetch_ohlcv(sym, timeframe=strategy.TF, limit=320)
-            if len(raw) < strategy.MIN_BARS:
-                continue
-            d = strategy.features(pd.DataFrame(raw, columns=["t", "o", "h", "l", "c", "v"]))
-            sig = strategy.signal(d, -2)
-            if not sig:
-                continue
-            side, meta = sig
-            if st.get("last_signal_ts") == meta["bar_ts"]:
-                continue
-            if not _tradeable(sym, meta):
-                log(f"Skip {sym}: qty/notional below exchange minimum")
-                continue
-            candidates.append((sym, side, meta, meta["vol_ratio"]))
+            _ctx = {}
+            for _tf, _mult in TF_PLAN:
+                with contextlib.redirect_stdout(sys.stderr):
+                    raw = t.exchange.fetch_ohlcv(sym, timeframe=_tf, limit=320)
+                if len(raw) < strategy.MIN_BARS:
+                    continue
+                d = strategy.features(pd.DataFrame(raw, columns=["t", "o", "h", "l", "c", "v"]))
+                _ctx[_tf] = d
+                sig = strategy.signal(d, -2)
+                if not sig:
+                    continue
+                side, meta = sig
+
+                # Setup 1h wajib searah tren 4h
+                if _tf != "4h":
+                    d4 = _ctx.get("4h")
+                    if d4 is None or len(d4) < 3:
+                        continue
+                    _c4 = float(d4.c.iloc[-2])
+                    _e4 = float(d4.ema50.iloc[-2])
+                    _e4p = float(d4.ema50.iloc[-3])
+                    _up4 = (_c4 > _e4) and (_e4 >= _e4p)
+                    _dn4 = (_c4 < _e4) and (_e4 <= _e4p)
+                    if side == "BUY" and not _up4:
+                        continue
+                    if side == "SELL" and not _dn4:
+                        continue
+
+                meta["tf"] = _tf
+                meta["risk_mult"] = _mult
+                if st.get("last_signal_ts") == meta["bar_ts"]:
+                    continue
+                if not _tradeable(sym, meta):
+                    log(f"Skip {sym}: qty/notional below exchange minimum")
+                    continue
+                candidates.append((sym, side, meta, meta["vol_ratio"]))
+                break   # sudah dapat setup di TF tertinggi untuk koin ini
         except Exception as e:
             log(f"scan {sym}: {type(e).__name__}: {str(e)[:120]}")
             continue
 
     if not candidates:
-        log("No compression-breakout signal on last closed 4h bar.")
+        log("No pullback signal on last closed 4h/1h bar.")
         return
 
     # Rank candidates by volume surge
@@ -532,7 +558,7 @@ def scan_and_enter(t):
             continue
 
         try:
-            dyn_risk = risk_budget(equity)
+            dyn_risk = round(risk_budget(equity) * float(meta.get("risk_mult", 1.0)), 2)
             qty = float(t.exchange.amount_to_precision(resolved, dyn_risk / sl_dist))
         except Exception as e:
             log(f"Skip {sym}: qty precision ({e})")
@@ -680,7 +706,7 @@ def scan_and_enter(t):
             ai_res = _debate
             ai_reason = _debate.primary_reason
             if _debate.dissenting_opinion:
-                ai_reason += f" | 异议: {_debate.dissenting_opinion[:50]}"
+                ai_reason += f" | Beda pendapat: {_debate.dissenting_opinion[:50]}"
             if _debate.decision_log_file:
                 log(f"Debate log: {_debate.decision_log_file}")
             log(f"DEBATE {sym}: {ai_res.action} conf {ai_res.confidence:.2f} | {ai_reason}")
