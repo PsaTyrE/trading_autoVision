@@ -170,11 +170,12 @@ class MultiAnalystEngine:
         if vr >= 2.4:
             conf = round(min(0.98, 0.82 + (vr - 2.4) * 0.08), 2)
             return AnalystVote(analyst="sentiment", action="HOLD", confidence=conf, reason=f"Volume climax warning ({vr:.2f}x). Extreme volume signals exhaustion.", risks=["climax"])
-        if bm_pct > 1.2:
-            # Dynamic penalty scaling with how far price has overextended
-            excess = bm_pct - 1.2
-            conf = round(min(0.98, 0.85 + min(0.12, excess * 0.04)), 2)
-            return AnalystVote(analyst="sentiment", action="HOLD", confidence=conf, reason=f"Chasing warning: price already {bm_pct:.2f}% beyond breakout level (anti-chasing pucuk).", risks=["chasing"])
+        # PULLBACK LOGIC: bm_pct = jarak harga dari ekstrem Bollinger (BB atas untuk LONG,
+        # BB bawah untuk SHORT). JAUH = aman. TIPIS = rawan entry di pucuk/dasar -> veto.
+        if bm_pct < 1.5:
+            tight = max(0.0, 1.5 - bm_pct)
+            conf = round(min(0.97, 0.86 + min(0.10, tight * 0.06)), 2)
+            return AnalystVote(analyst="sentiment", action="HOLD", confidence=conf, reason=f"Terlalu dekat ekstrem Bollinger ({bm_pct:.2f}% < 1.5%). Rawan entry di pucuk/dasar.", risks=["too close to extreme"])
 
         action = proposed if proposed in ("LONG", "SHORT") else "HOLD"
         conf = round(min(0.92, 0.76 + min(0.12, vr * 0.05)), 2)

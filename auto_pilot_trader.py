@@ -776,15 +776,45 @@ def scan_and_enter(t):
             continue
 
         # 60% TP1, 25% TP2, 15% Runner (Frontloaded profit taking)
+        # Qty WAJIB dibulatkan KE BAWAH ke step exchange; kalau sisa < minimum,
+        # TP dilewati dan posisi dijaga SL + trailing (jangan sampai TP gagal total).
         try:
             with contextlib.redirect_stdout(sys.stderr):
-                tp1_qty = float(t.exchange.amount_to_precision(resolved, qty * 0.60))
-                tp2_qty = float(t.exchange.amount_to_precision(resolved, qty * 0.25))
+                _mk = t.exchange.market(resolved)
+                _minq = float(((_mk.get("limits") or {}).get("amount") or {}).get("min") or 0)
+                _praw = (_mk.get("precision") or {}).get("amount")
+                if isinstance(_praw, (int, float)) and float(_praw) >= 1:
+                    _step = float(_praw)
+                else:
+                    _step = 10 ** (-float(_praw if _praw is not None else 8))
+                if _step <= 0:
+                    _step = 1e-8
+
+                def _floor_q(x):
+                    v = round(math.floor((float(x) + 1e-12) / _step) * _step, 8)
+                    if v <= 0 or v < _minq:
+                        return 0.0
+                    return float(t.exchange.amount_to_precision(resolved, v))
+
+                tp1_qty = _floor_q(qty * 0.60)
+                tp2_qty = _floor_q(qty * 0.25)
+                # sisakan runner: jangan biarkan total TP menghabiskan seluruh posisi
+                if tp1_qty + tp2_qty >= qty:
+                    if tp1_qty < qty:
+                        tp2_qty = 0.0
+                    else:
+                        tp1_qty = 0.0
+                        tp2_qty = 0.0
+
                 if tp1_qty > 0:
                     t.place_limit_order(sym, close_side, tp1_qty, tp1_price, reduce_only=True)
                 if tp2_qty > 0:
                     t.place_limit_order(sym, close_side, tp2_qty, tp2_price, reduce_only=True)
-                log(f"LADDER PLACED {sym}: TP1 {tp1_qty} @ {tp1_price} (60%) | TP2 {tp2_qty} @ {tp2_price} (25%) | Runner {round(qty - tp1_qty - tp2_qty, 4)} (15%)")
+
+                if tp1_qty <= 0 and tp2_qty <= 0:
+                    log(f"TP ladder SKIP {sym}: qty {qty} < step minimum {_minq} - posisi dijaga SL + trailing")
+                else:
+                    log(f"LADDER PLACED {sym}: TP1 {tp1_qty} @ {tp1_price} | TP2 {tp2_qty} @ {tp2_price} | Runner {round(qty - tp1_qty - tp2_qty, 4)}")
         except Exception as te:
             log(f"TP placement error {sym}: {te}")
 
