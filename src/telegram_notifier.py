@@ -9,7 +9,7 @@ class TelegramNotifier:
         self.enabled = bool(self.token and self.chat_id)
 
     def send_message(self, text: str):
-        """Sends markdown formatted Telegram message."""
+        """Sends formatted Telegram message with fallback if HTML parse fails."""
         if not self.enabled:
             return
 
@@ -19,14 +19,16 @@ class TelegramNotifier:
             "text": text,
             "parse_mode": "HTML"
         }
-        # AUDIT FIX: Pi networks are slow; timeout=5 silently dropped alerts on
-        # congestion. 10s + one retry so a critical alert (SL/TP/circuit breaker)
-        # is not lost to a transient network blip.
         for attempt in (1, 2):
             try:
                 resp = requests.post(url, json=payload, timeout=10)
                 if resp.status_code != 200:
-                    print(f"[!] Telegram API error {resp.status_code}: {resp.text[:100]}")
+                    # Fallback plain text if unclosed HTML tag exists in raw text
+                    if "can't parse entities" in resp.text:
+                        payload_plain = {"chat_id": self.chat_id, "text": text}
+                        requests.post(url, json=payload_plain, timeout=10)
+                    else:
+                        print(f"[!] Telegram API error {resp.status_code}: {resp.text[:100]}")
                 return
             except Exception as e:
                 if attempt == 2:
