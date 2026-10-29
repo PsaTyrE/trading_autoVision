@@ -69,10 +69,10 @@ MIN_AI_CONF = float(os.getenv("MIN_AI_CONF", "0.85"))
 # Risk USDT dihitung dari equity live, dan persentasenya NAIK bertahap
 # seiring saldo tumbuh. Ini yang bikin growth eksponensial, bukan linear.
 RISK_TIERS = [
-    (0.0,   0.016),   # < $75   -> 1.6% per trade
-    (75.0,  0.020),   # $75+    -> 2.0%
-    (150.0, 0.025),   # $150+   -> 2.5%
-    (300.0, 0.030),   # $300+   -> 3.0%
+    (0.0,   0.020),   # < $75   -> 2.0% per trade
+    (75.0,  0.024),   # $75+    -> 2.4%
+    (150.0, 0.028),   # $150+   -> 2.8%
+    (300.0, 0.032),   # $300+   -> 3.2%
     (600.0, 0.035),   # $600+   -> 3.5%
 ]
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
