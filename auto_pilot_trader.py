@@ -634,8 +634,8 @@ def scan_and_enter(t):
                     "recommended_grid_count": 1,
                     "profit_multiplier": round(strategy.TP2_R, 2),
                     "reasons": [
-                        f"compression bbw<={strategy.COMPRESSION_Q} on previous bar, expansion now",
-                        f"close broke {strategy.BREAK_LOOKBACK}-bar extreme by {meta.get('breakout_margin', 0.0):.6g}",
+                        f"trend-following pullback retest near EMA50 / BB_MID with RSI {meta.get('rsi', 0.0):.1f}",
+                        f"price safely cleared >=1.5% below Upper Bollinger Band (clearance: {meta.get('breakout_margin', 0.0):.4f})",
                         f"volume {meta['vol_ratio']:.2f}x the 20-bar mean (gate {strategy.MIN_VOL_RATIO})",
                         f"structural stop at {strategy.SL_ATR}xATR = {_sd:.6g}",
                     ]

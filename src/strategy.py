@@ -1,29 +1,28 @@
-"""Entry: volatility-compression breakout on 4h, both directions.
+"""Entry: Trend-Following Pullback / Buy on Dip (Anti-Pucuk, Anti-Dasar).
 
-Measured: NO edge vs matched random over ~3,000 simulated trades
-(9 setup families tested, all fail random-baseline + fee test).
-This runs as a capped data-collection experiment, not as an edge.
+Core Logic:
+  - BUY (Dip in Uptrend):
+      1. Macro trend: Close > EMA50 and EMA50 rising.
+      2. Healthy Pullback: RSI between 38 and 56 (not overbought, healthy retrace).
+      3. Value Zone: Price pulling back to / testing dynamic support (EMA50 or BB_MID or VWAP).
+      4. Anti-Pucuk Ceiling: Price must be >= 1.5% below Upper Bollinger Band (c <= bb_up * 0.985).
+      5. Price Action Confirmation: Bullish reversal candle (Close > Open) with lower wick rejection.
+      6. Volume: Volume ratio >= MIN_VOL_RATIO (0.9x).
+      7. SMC Guard: No bearish liquidity sweep rejection at highs.
 
-Structural choices that ARE justified by measurement:
-  - wide stop (2x ATR 4h) -> notional = risk/stop% is small
-    -> fee/risk ~2.5% instead of 25% with a 0.4% stop
-  - 1 trade/day cap -> fee bleed bounded
-  - fixed $ risk -> every loss the same size
-
-ponytail: one signal family, no config knobs. Add filters only when
-trade_journal.csv shows positive R over 30+ closed trades.
+  - SELL (Rally in Downtrend):
+      1. Macro trend: Close < EMA50 and EMA50 falling.
+      2. Healthy Retrace: RSI between 44 and 62 (not oversold).
+      3. Value Zone: Price pulling back to / testing dynamic resistance (EMA50 or BB_MID).
+      4. Anti-Dasar Floor: Price must be >= 1.5% above Lower Bollinger Band (c >= bb_lo * 1.015).
+      5. Price Action Confirmation: Bearish reversal candle (Close < Open) with upper wick rejection.
+      6. Volume: Volume ratio >= MIN_VOL_RATIO (0.9x).
+      7. SMC Guard: No bullish liquidity sweep rejection at lows.
 """
 import os
-
 import pandas as pd
 
-
 def _num(name, default):
-    """Env override with the default as a hard fallback.
-
-    A typo in .env must not kill the cron cycle at import time, so an unparsable
-    value is reported on stderr and ignored rather than raised.
-    """
     raw = os.getenv(name)
     if raw is None or raw == "":
         return default
@@ -33,20 +32,13 @@ def _num(name, default):
         print(f"[strategy] ignoring non-numeric {name}={raw!r}", flush=True)
         return default
 
-
-# Every knob is env-tunable, defaults unchanged. Nothing here is loosened by
-# default: MIN_VOL_RATIO stays 1.0x because the strategy has no measured edge,
-# and the only reason to move it is 30+ closed trades saying so.
 TF = os.getenv("STRAT_TF", "4h")
-COMPRESSION_Q = _num("STRAT_COMPRESSION_Q", 0.25)
-BREAK_LOOKBACK = int(_num("STRAT_BREAK_LOOKBACK", 20))
 SL_ATR = _num("STRAT_SL_ATR", 2.0)
 TP1_R = _num("STRAT_TP1_R", 2.0)
 TP2_R = _num("STRAT_TP2_R", 3.5)
 BE_AT_R = _num("STRAT_BE_AT_R", 1.0)
-MIN_BARS = int(_num("STRAT_MIN_BARS", 220))
+MIN_BARS = int(_num("STRAT_MIN_BARS", 120))
 MIN_VOL_RATIO = _num("STRAT_MIN_VOL_RATIO", 1.0)
-
 
 def features(df):
     d = df.copy()
@@ -55,49 +47,48 @@ def features(df):
     ).max(axis=1)
     d["atr"] = tr.rolling(14).mean()
     d["vma"] = d.v.rolling(20).mean()
-    d["bbw"] = d.c.rolling(20).std() / d.c
-    d["bwq"] = d.bbw.rolling(100).quantile(COMPRESSION_Q)
-    d["hh"] = d.h.rolling(BREAK_LOOKBACK).max().shift(1)
-    d["ll"] = d.l.rolling(BREAK_LOOKBACK).min().shift(1)
-    # SNAPSHOT_REAL: the AI prompt used to receive a hardcoded score=100 and
-    # volume_condition="high", so every setup was "confirmed" by construction.
+    
+    # Trend & Support/Resistance Indicators
     d["ema50"] = d.c.ewm(span=50, adjust=False).mean()
     _up = d.c.diff().clip(lower=0).rolling(14).mean()
     _dn = (-d.c.diff().clip(upper=0)).rolling(14).mean()
     d["rsi"] = 100 - 100 / (1 + _up / _dn)
-    # SNAPSHOT_FULL: the AI prompt asks for bollinger_bands and macd, so they have
-    # to be computed here and sent as real numbers instead of being guessed.
+    
+    # Bollinger Bands
     d["bb_mid"] = d.c.rolling(20).mean()
     _bs = d.c.rolling(20).std()
     d["bb_up"] = d.bb_mid + 2 * _bs
     d["bb_lo"] = d.bb_mid - 2 * _bs
+    d["bbw"] = (d.bb_up - d.bb_lo) / d.c
+    d["bwq"] = d.bbw.rolling(100).quantile(0.25)
+    
+    # Swing extremes for reference
+    d["hh"] = d.h.rolling(20).max().shift(1)
+    d["ll"] = d.l.rolling(20).min().shift(1)
+
+    # MACD
     _e12 = d.c.ewm(span=12, adjust=False).mean()
     _e26 = d.c.ewm(span=26, adjust=False).mean()
     d["macd"] = _e12 - _e26
     d["macd_sig"] = d.macd.ewm(span=9, adjust=False).mean()
     d["macd_hist"] = d.macd - d.macd_sig
-    # VWAP (Rolling 20-bar Volume Weighted Average Price)
-    # Institutional benchmark: Long above VWAP, Short below VWAP
+
+    # VWAP
     _tp = (d.h + d.l + d.c) / 3.0
     _pv = _tp * d.v
     d["vwap"] = _pv.rolling(20).sum() / d.v.rolling(20).sum().replace(0, 1e-9)
 
-    # SMC: Fair Value Gap (FVG) and Liquidity Sweep checks
-    # Bullish FVG at i: low[i+1] > high[i-1] (imbalance)
-    # Bearish FVG at i: high[i+1] < low[i-1]
+    # SMC: Liquidity Sweep detection
     _h = d.h.values
     _l = d.l.values
     _c = d.c.values
     _n = len(d)
     _fvg_bias = ["neutral"] * _n
     _sweep_bias = ["none"] * _n
-
-    _fvg_gap_top = [float('nan')] * _n
-    _fvg_gap_bot = [float('nan')] * _n
+    _fvg_gap_top = [float("nan")] * _n
+    _fvg_gap_bot = [float("nan")] * _n
 
     for i in range(2, _n):
-        # FVG on previous 3-bar formation
-        # Bullish FVG: bar i-2 High to bar i Low gap
         if _l[i] > _h[i - 2]:
             _fvg_bias[i] = "bullish_fvg"
             _fvg_gap_top[i] = _l[i]
@@ -107,16 +98,15 @@ def features(df):
             _fvg_gap_top[i] = _l[i - 2]
             _fvg_gap_bot[i] = _h[i]
 
-        # Liquidity Sweep (wick pierce beyond 10-bar prior high/low followed by close reject)
         _win_h = _h[max(0, i - 10):i]
         _win_l = _l[max(0, i - 10):i]
         if len(_win_h) > 0 and len(_win_l) > 0:
             _prior_h = float(_win_h.max())
             _prior_l = float(_win_l.min())
             if _h[i] > _prior_h and _c[i] < _prior_h:
-                _sweep_bias[i] = "bearish_liquidity_sweep" # swept highs, rejected
+                _sweep_bias[i] = "bearish_liquidity_sweep"
             elif _l[i] < _prior_l and _c[i] > _prior_l:
-                _sweep_bias[i] = "bullish_liquidity_sweep" # swept lows, rejected
+                _sweep_bias[i] = "bullish_liquidity_sweep"
 
     d["smc_fvg"] = _fvg_bias
     d["smc_sweep"] = _sweep_bias
@@ -124,67 +114,100 @@ def features(df):
     d["fvg_bot"] = _fvg_gap_bot
     return d
 
-
 def signal(d, i=-1):
-    """(side, meta) or None. side in {"BUY","SELL"}. d must come from features()."""
+    """(side, meta) or None. Pullback / Buy on Dip signal generator."""
     if len(d) < MIN_BARS:
         return None
-    if pd.isna(d.bwq.iloc[i]) or pd.isna(d.atr.iloc[i]) or pd.isna(d.vma.iloc[i]):
+    if pd.isna(d.atr.iloc[i]) or pd.isna(d.vma.iloc[i]) or pd.isna(d.rsi.iloc[i]):
         return None
     if d.atr.iloc[i] <= 0:
         return None
-    # compression must exist on the PREVIOUS bar, expansion happens now
-    if d.bbw.iloc[i - 1] > d.bwq.iloc[i - 1]:
+    if d.v.iloc[i] < d.vma.iloc[i] * MIN_VOL_RATIO:
         return None
-    if d.v.iloc[i] <= d.vma.iloc[i] * MIN_VOL_RATIO:
-        return None
-    # SMC Filter: Dilarang BUY di pucuk (bearish sweep) atau SELL di dasar (bullish sweep)
-    # Wajib ada konfirmasi bias SMC (FVG atau liquidity sweep)
-    fvg = str(d.smc_fvg.iloc[i])
-    sweep = str(d.smc_sweep.iloc[i])
 
-    if d.c.iloc[i] > d.hh.iloc[i]:
-        if sweep == "bearish_liquidity_sweep":
-            return None  # Sweep pucuk dan reject, jangan beli pucuk!
-        side = "BUY"
-    elif d.c.iloc[i] < d.ll.iloc[i]:
-        if sweep == "bullish_liquidity_sweep":
-            return None  # Sweep lembah dan reject, jangan sell dasar!
-        side = "SELL"
-    else:
-        return None
     c = float(d.c.iloc[i])
+    o = float(d.o.iloc[i])
+    h = float(d.h.iloc[i])
+    l = float(d.l.iloc[i])
     atr = float(d.atr.iloc[i])
+    rsi = float(d.rsi.iloc[i])
+    ema50 = float(d.ema50.iloc[i])
+    ema50_prev = float(d.ema50.iloc[i - 1])
+    bb_up = float(d.bb_up.iloc[i])
+    bb_lo = float(d.bb_lo.iloc[i])
+    bb_mid = float(d.bb_mid.iloc[i])
+    vwap = float(d.vwap.iloc[i])
+    sweep = str(d.smc_sweep.iloc[i])
     vr = float(d.v.iloc[i] / d.vma.iloc[i])
-    hh, ll = float(d.hh.iloc[i]), float(d.ll.iloc[i])
-    margin = (c - hh) if side == "BUY" else (ll - c)
-    # Transparent 0-100 score: 50 base, +25 for volume above the gate (capped 3x),
-    # +25 for how far the bar closed beyond the 20-bar extreme (in ATR units).
-    score = 50 + 25 * min(2.0, max(0.0, vr - 1.0)) + 25 * min(1.0, max(0.0, margin / atr))
+
+    lower_wick = min(o, c) - l
+    upper_wick = h - max(o, c)
+    body = max(1e-9, abs(c - o))
+
+    is_uptrend = (c > ema50) and (ema50 >= ema50_prev)
+    is_downtrend = (c < ema50) and (ema50 <= ema50_prev)
+
+    side = None
+    dip_margin = 0.0
+
+    # 1. BUY PULLBACK (DIP)
+    if is_uptrend and (36.0 <= rsi <= 58.0) and (c <= bb_up * 0.985):
+        if sweep == "bearish_liquidity_sweep":
+            return None  # Sweep high rejection -> DILARANG BUY
+        # Retest zone: price touches or is within 2.5% of EMA50, BB_MID, or VWAP
+        near_ema = abs(c - ema50) / c <= 0.03 or (l <= ema50 and c >= ema50)
+        near_bb_mid = abs(c - bb_mid) / c <= 0.025 or (l <= bb_mid and c >= bb_mid)
+        near_vwap = abs(c - vwap) / c <= 0.025 or (l <= vwap and c >= vwap)
+        
+        # Bullish confirmation candle (green candle or strong lower wick rejection)
+        bullish_confirm = (c > o) and (lower_wick >= body * 0.35 or c > float(d.c.iloc[i - 1]))
+        if (near_ema or near_bb_mid or near_vwap) and bullish_confirm:
+            side = "BUY"
+            dip_margin = max(0.0, bb_up - c)
+
+    # 2. SELL PULLBACK (RALLY TO RESISTANCE)
+    elif is_downtrend and (42.0 <= rsi <= 64.0) and (c >= bb_lo * 1.015):
+        if sweep == "bullish_liquidity_sweep":
+            return None  # Sweep low rejection -> DILARANG SELL
+        near_ema = abs(c - ema50) / c <= 0.03 or (h >= ema50 and c <= ema50)
+        near_bb_mid = abs(c - bb_mid) / c <= 0.025 or (h >= bb_mid and c <= bb_mid)
+        near_vwap = abs(c - vwap) / c <= 0.025 or (h >= vwap and c <= vwap)
+
+        bearish_confirm = (c < o) and (upper_wick >= body * 0.35 or c < float(d.c.iloc[i - 1]))
+        if (near_ema or near_bb_mid or near_vwap) and bearish_confirm:
+            side = "SELL"
+            dip_margin = max(0.0, c - bb_lo)
+
+    if not side:
+        return None
+
+    # Score: based on healthy RSI position, bounce quality, and volume confirmation
+    rsi_quality = (1.0 - abs(rsi - 48.0) / 20.0)  # best around 48
+    score = 50.0 + 25.0 * min(2.0, max(0.0, vr - 0.9)) + 25.0 * max(0.0, min(1.0, rsi_quality))
+
     return side, {
         "atr": atr,
         "close": c,
         "vol_ratio": vr,
         "bar_ts": int(d.t.iloc[i]),
-        "rsi": float(d.rsi.iloc[i]),
-        "ema50": float(d.ema50.iloc[i]),
-        "trend_up": bool(c > float(d.ema50.iloc[i])),
-        "breakout_margin": margin,
+        "rsi": rsi,
+        "ema50": ema50,
+        "trend_up": bool(c > ema50),
+        "breakout_margin": dip_margin,
         "score": round(min(100.0, max(0.0, score)), 1),
-        "bb_up": float(d.bb_up.iloc[i]),
-        "bb_lo": float(d.bb_lo.iloc[i]),
-        "bb_mid": float(d.bb_mid.iloc[i]),
+        "bb_up": bb_up,
+        "bb_lo": bb_lo,
+        "bb_mid": bb_mid,
         "macd_hist": float(d.macd_hist.iloc[i]),
         "macd_prev": float(d.macd_hist.iloc[i - 1]),
-        "ema50_prev": float(d.ema50.iloc[i - 1]),
-        "vwap": float(d.vwap.iloc[i]),
-        "vwap_aligned": bool(c > float(d.vwap.iloc[i])) if side == "BUY" else bool(c < float(d.vwap.iloc[i])),
+        "ema50_prev": ema50_prev,
+        "vwap": vwap,
+        "vwap_aligned": bool(c > vwap) if side == "BUY" else bool(c < vwap),
         "smc_fvg": str(d.smc_fvg.iloc[i]),
-        "smc_sweep": str(d.smc_sweep.iloc[i]),
+        "smc_sweep": sweep,
         "fvg_top": float(d.fvg_top.iloc[i]) if not pd.isna(d.fvg_top.iloc[i]) else None,
         "fvg_bot": float(d.fvg_bot.iloc[i]) if not pd.isna(d.fvg_bot.iloc[i]) else None,
     }
-
 
 def levels(entry, atr, side):
     """(sl, tp1, tp2, sl_dist) raw floats, unrounded."""

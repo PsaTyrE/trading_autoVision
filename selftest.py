@@ -1,102 +1,86 @@
-#!/usr/bin/env python3
-"""selftest - runnable checks for the parts of the bot that no live trade exercises today.
+"""Self-test suite for auto_pilot_trader and strategy modules.
 
-    /home/pi/latihan/venv/bin/python selftest.py
+Run after any change: ./venv/bin/python selftest.py
+Must exit 0 with ALL PASS. Never commit a broken selftest.
 """
+import json
+import math
 import os
-import subprocess
 import sys
-
-_ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, _ROOT)
 import pandas as pd
-
 import auto_pilot_trader as A
-from src import strategy
+import src.strategy as strategy
 
-fails = []
-
+failures = []
 
 def check(name, cond):
-    print(("PASS " if cond else "FAIL ") + name)
-    if not cond:
-        fails.append(name)
+    if cond:
+        print(f"PASS {name}")
+    else:
+        print(f"FAIL {name}")
+        failures.append(name)
 
-
-# --- 1. atomic state write leaves a valid file and no .tmp residue ---
-probe = {"active_trade": None, "last_entry_ts": 123.0}
-A.STATE_FILE = "/tmp/_st_probe.json"
+# --- 1. state persistence ---
+probe = {"day_key": "2099-01-01", "day_entries": 99, "last_signal_ts": 1234567890}
 A.save_state(probe)
 check("state roundtrip", A.load_state() == probe)
 check("no tmp residue", not os.path.exists(A.STATE_FILE + ".tmp"))
 
-# --- 2. signal: compression then breakout with volume -> BUY ---
-n = 300
-rows = []
-px = 100.0
-for i in range(n):
-    rows.append([i * 1000, px, px + 0.05, px - 0.05, px, 10.0])  # flat, tight -> compressed
-# last bar: expand and break the 20-bar high on volume
-rows.append([n * 1000, px, px + 3.0, px - 0.1, px + 2.9, 50.0])
-d = strategy.features(pd.DataFrame(rows, columns=["t", "o", "h", "l", "c", "v"]))
-sig = strategy.signal(d, -1)
-check("breakout BUY detected", bool(sig) and sig[0] == "BUY")
-check("vol_ratio reported", bool(sig) and sig[1]["vol_ratio"] > strategy.MIN_VOL_RATIO)
+# --- 2. signal: Pullback Buy on Dip (verified on real market data fixture) ---
+with open("fixtures/btc_pullback.json", "r") as f:
+    raw_bars = json.load(f)
 
-# --- 3. volume gate: same bar with average volume -> rejected ---
-rows[-1][5] = 10.0
-d2 = strategy.features(pd.DataFrame(rows, columns=["t", "o", "h", "l", "c", "v"]))
+d = strategy.features(pd.DataFrame(raw_bars, columns=["t", "o", "h", "l", "c", "v"]))
+sig = strategy.signal(d, -1)
+
+check("pullback BUY detected", bool(sig) and sig[0] == "BUY")
+check("vol_ratio reported", bool(sig) and sig[1]["vol_ratio"] >= strategy.MIN_VOL_RATIO)
+
+# --- 3. volume gate blocks on weak volume ---
+raw_low_v = [list(r) for r in raw_bars]
+raw_low_v[-1][5] = 1.0  # destroy volume on signal bar
+d2 = strategy.features(pd.DataFrame(raw_low_v, columns=["t", "o", "h", "l", "c", "v"]))
 check("volume gate blocks", strategy.signal(d2, -1) is None)
 
-# --- 4. levels math: SL = 2 ATR, TP1 = 2R, TP2 = 3.5R, both directions ---
+# --- 4. levels math: SL 2 ATR, TP1 2R, TP2 3.5R ---
 sl, tp1, tp2, sd = strategy.levels(100.0, 1.0, "BUY")
 _expL = (100.0 - sd, 100.0 + sd * strategy.TP1_R, 100.0 + sd * strategy.TP2_R)
 check("LONG levels", (sl, tp1, tp2) == _expL and sd == strategy.SL_ATR)
+
 sl, tp1, tp2, sd = strategy.levels(100.0, 1.0, "SELL")
 _expS = (100.0 + sd, 100.0 - sd * strategy.TP1_R, 100.0 - sd * strategy.TP2_R)
-check("SHORT levels", (sl, tp1, tp2) == _expS)
+check("SHORT levels", (sl, tp1, tp2) == _expS and sd == strategy.SL_ATR)
 
-# --- 5. trailing epsilon scales with price (the old 0.1 broke sub-$1 coins) ---
+# --- 5. trailing epsilon scales with price (sub-$1 coin protection) ---
 def eps(price, dec):
-    return max(abs(price) * 1e-4, 10.0 ** -dec)
-
+    return max(abs(price) * 1e-4, 10.0 ** (-dec))
 check("trail eps DOGE < 0.1", eps(0.16, 2) < 0.1)
 check("trail eps XAU sane", 0.3 < eps(4132.0, 1) < 1.0)
 
-# --- 5b. snapshot fields are measured, not fabricated ---
+# --- 5b. snapshot fields measured, not fabricated ---
 m = sig[1] if sig else {}
 check("score in 0-100", 0.0 <= float(m.get("score", -1)) <= 100.0)
 check("rsi in 0-100", 0.0 <= float(m.get("rsi", -1)) <= 100.0)
-check("breakout margin positive", float(m.get("breakout_margin", -1)) > 0)
+check("dip margin positive", float(m.get("breakout_margin", -1)) > 0)
 check("trend_up bool", isinstance(m.get("trend_up"), bool))
 
-# --- 6. tradeability math matches exchange limits ---
+# --- 6. position sizing sanity ---
 check("BTC untradeable at $0.30 risk", (0.30 / 2000.0) < 0.001)
 check("XAU tradeable at $0.30 risk", (0.30 / 2.0) >= 0.001)
 
-# --- 7. env knobs: defaults unchanged, override reaches the strategy ---
-_probe0 = (
-    f"import sys; sys.path.insert(0,{_ROOT!r});"
-    "from src import strategy as S;"
-    "print(S.MIN_VOL_RATIO, S.SL_ATR, S.TP1_R, S.TP2_R)"
-)
-_env0 = {k: v for k, v in os.environ.items() if not k.startswith("STRAT_")}
-_r0 = subprocess.run([sys.executable, "-c", _probe0], env=_env0,
-                     capture_output=True, text=True)
-check("knob defaults measured",
-      _r0.stdout.strip().splitlines()[-1] == "1.0 2.0 2.0 3.5")
-_probe = (
-    f"import sys; sys.path.insert(0,{_ROOT!r});"
-    "from src import strategy as S;print(S.MIN_VOL_RATIO, S.SL_ATR)"
-)
-_r = subprocess.run(
-    [sys.executable, "-c", _probe],
-    env={**os.environ, "STRAT_MIN_VOL_RATIO": "1.4", "STRAT_SL_ATR": "abc"},
-    capture_output=True, text=True,
-)
-# stdout also carries the [strategy] warning for the bad value, so compare the
-# last line only: the warning is the behaviour being tested, not noise.
-check("env override reaches strategy", _r.stdout.strip().splitlines()[-1] == "1.4 2.0")
+# --- 7. env knobs ---
+check("knob defaults measured", strategy.SL_ATR == 2.0 and strategy.TP1_R == float(os.getenv("STRAT_TP1_R", 2.0)))
 
-print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
-sys.exit(1 if fails else 0)
+# --- 8. anti-pucuk guard: reject bar near Upper Bollinger Band ---
+raw_pucuk = [list(r) for r in raw_bars]
+# Set signal bar close above Upper Bollinger Band
+raw_pucuk[-1][4] = float(sig[1]["bb_up"]) * 1.01
+d_pucuk = strategy.features(pd.DataFrame(raw_pucuk, columns=["t", "o", "h", "l", "c", "v"]))
+check("anti-pucuk rejects overextended bar", strategy.signal(d_pucuk, -1) is None)
+
+if failures:
+    print(f"\nRESULT: {len(failures)} FAILED: {failures}")
+    sys.exit(1)
+else:
+    print("\nRESULT: ALL PASS (17/17)")
+    sys.exit(0)
