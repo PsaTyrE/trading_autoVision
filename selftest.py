@@ -107,9 +107,15 @@ check("rsi1h veto SHORT 41.0", A.rsi1h_veto("SHORT", 41.0) is True)
 check("rsi1h veto SHORT 52.4 lolos", A.rsi1h_veto("SHORT", 52.4) is False)
 check("rsi1h veto None lolos", A.rsi1h_veto("LONG", None) is False)
 
+# --- 12. deteksi level TP yang sudah dilewati ---
+check("tp passed SHORT 1.2725 vs 1.243", A.tp_leg_passed("SHORT", 1.2725, 1.243) is True)
+check("tp belum SHORT 1.20 vs 1.243", A.tp_leg_passed("SHORT", 1.20, 1.243) is False)
+check("tp passed LONG 1.30 vs 1.35", A.tp_leg_passed("LONG", 1.30, 1.35) is True)
+check("tp belum LONG 1.40 vs 1.35", A.tp_leg_passed("LONG", 1.40, 1.35) is False)
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 16, 17 + 16))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 20, 17 + 20))
     sys.exit(0)

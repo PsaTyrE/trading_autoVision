@@ -32,6 +32,18 @@
       "cluster": "MISC",
       "ts": 1793307712,
       "risk": 0.6498
+    },
+    "BR/USDT:USDT": {
+      "symbol": "BR/USDT:USDT",
+      "side": "SHORT",
+      "entry": 0.4778,
+      "qty": 33.0,
+      "sl": 0.498,
+      "tp1": 0.4576,
+      "tp2": 0.4374,
+      "cluster": "MISC",
+      "ts": 1793314835,
+      "risk": 0.6666
     }
   },
   "excursions": {
@@ -40,8 +52,12 @@
       "mae_pct": -0.07
     },
     "GTC/USDT:USDT": {
-      "mfe_pct": 3.084,
+      "mfe_pct": 5.329,
       "mae_pct": -1.977
+    },
+    "BR/USDT:USDT": {
+      "mfe_pct": 0.377,
+      "mae_pct": 0.0
     }
   }
 }

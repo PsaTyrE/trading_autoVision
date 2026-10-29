@@ -78,6 +78,15 @@ RISK_TIERS = [
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
 
 
+def tp_leg_passed(side, tp, price) -> bool:
+    """True kalau level TP sudah dilewati harga (pasang limit di sini = langsung eksekusi pasar)."""
+    try:
+        tp = float(tp); price = float(price)
+    except Exception:
+        return False
+    return (tp >= price) if side == "SHORT" else (tp <= price)
+
+
 def rsi1h_veto(side, rsi1h) -> bool:
     """True kalau RSI 1h sudah jenuh untuk arah tsb -> entry dilarang."""
     if rsi1h is None:
@@ -464,18 +473,29 @@ def manage_open_positions(t):
         if _oo is not None and trade_meta.get("tp1") and trade_meta.get("tp2"):
             _cs = "sell" if side == "LONG" else "buy"
             if not [o for o in _oo if str(o.get("side") or "").lower() == _cs]:
-                if abs(qty - float(trade_meta.get("qty") or 0)) < 1e-9:
-                    try:
-                        _q1 = float(t.exchange.amount_to_precision(symbol, qty * 0.60))
-                        _q2 = float(t.exchange.amount_to_precision(symbol, qty * 0.25))
+                # Dulu syaratnya qty == qty awal, jadi re-arm MATI PERMANEN begitu satu TP
+                # kena: leg yang gagal pasang (XRP TP1) tidak pernah balik. Sekarang skala
+                # ke sisa posisi, dan level yang sudah dilewati harga di-skip (limit di
+                # harga lampau = langsung eksekusi pasar, bukan TP).
+                try:
+                    _q1 = float(t.exchange.amount_to_precision(symbol, qty * 0.60))
+                    _q2 = float(t.exchange.amount_to_precision(symbol, qty * 0.25))
+                    _re = []
+                    for _qq, _tp in ((_q1, trade_meta["tp1"]), (_q2, trade_meta["tp2"])):
+                        if _qq <= 0:
+                            continue
+                        _tpp = float(_tp)
+                        if tp_leg_passed(side, _tpp, cur_price):
+                            log(f"TP MISSED {symbol}: level {_tpp} sudah dilewati harga {cur_price} - sisa ikut trailing")
+                            continue
                         with contextlib.redirect_stdout(sys.stderr):
-                            if _q1 > 0:
-                                t.place_limit_order(symbol, _cs, _q1, float(trade_meta["tp1"]), reduce_only=True)
-                            if _q2 > 0:
-                                t.place_limit_order(symbol, _cs, _q2, float(trade_meta["tp2"]), reduce_only=True)
-                        log(f"TP RE-ARM {symbol}: {_q1} (60%) @ {trade_meta['tp1']} | {_q2} (25%) @ {trade_meta['tp2']} | runner 15% trailing")
-                    except Exception as te:
-                        log(f"TP re-arm failed {symbol}: {te}")
+                            _ok = t.place_limit_order(symbol, _cs, _qq, _tpp, reduce_only=True)
+                        if _ok:
+                            _re.append((_qq, _tpp))
+                    if _re:
+                        log(f"TP RE-ARM {symbol}: " + " | ".join(f"{q}@{p}" for q, p in _re) + " | runner trailing")
+                except Exception as te:
+                    log(f"TP re-arm failed {symbol}: {te}")
 
         if lock_sl:
             eps = max(abs(cur_price) * 1e-4, 10.0 ** -dec)
@@ -983,6 +1003,7 @@ def scan_and_enter(t):
                 _sign = 1.0 if side == "BUY" else -1.0
 
                 _placed = []
+                _tried = 0
                 _runner_units = _units
                 if _units >= 2 and _r > 0:
                     _runner_units = 1 if _units <= 4 else max(1, int(round(_units * 0.10)))
@@ -1004,12 +1025,19 @@ def scan_and_enter(t):
                         if _q <= 0 or _q < _minq:
                             continue
                         _p = px(float(fill) + _sign * _r * _mult)
-                        t.place_limit_order(sym, close_side, _q, _p, reduce_only=True)
-                        _placed.append((_mult, _q, _p))
+                        _tried += 1
+                        # place_limit_order menelan error dan balik falsy; dulu tetap
+                        # di-append -> log bilang LADDER PLACED padahal leg-nya bolong
+                        if t.place_limit_order(sym, close_side, _q, _p, reduce_only=True):
+                            _placed.append((_mult, _q, _p))
+                        else:
+                            log(f"LADDER LEG FAILED {sym}: {_q}@{_p} ({_mult:g}R) tidak terpasang")
 
                 if _placed:
                     _txt = " | ".join(f"TP{i+1} {q}@{p} ({m:g}R)" for i, (m, q, p) in enumerate(_placed))
                     log(f"LADDER PLACED {sym}: {_txt} | Runner {round(_runner_units * _step, 8)}")
+                    if len(_placed) < _tried:
+                        log(f"LADDER PARTIAL {sym}: cuma {len(_placed)}/{_tried} leg terpasang - sisanya dijaga SL + trailing")
                 else:
                     log(f"TP ladder SKIP {sym}: qty {qty} < step minimum {_minq} - dijaga SL + trailing")
         except Exception as te:
