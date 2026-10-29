@@ -100,9 +100,16 @@ check("entry_ts picks earliest fill",
 check("entry_ts falls back when empty", A.entry_ts_from_trades([], 12345) == 12345)
 check("entry_ts exported", hasattr(A, "entry_ts_from_trades"))
 
+# --- 11. veto RSI 1h ---
+check("rsi1h veto LONG 81.5", A.rsi1h_veto("LONG", 81.5) is True)
+check("rsi1h veto LONG 57.2 lolos", A.rsi1h_veto("LONG", 57.2) is False)
+check("rsi1h veto SHORT 41.0", A.rsi1h_veto("SHORT", 41.0) is True)
+check("rsi1h veto SHORT 52.4 lolos", A.rsi1h_veto("SHORT", 52.4) is False)
+check("rsi1h veto None lolos", A.rsi1h_veto("LONG", None) is False)
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 11, 17 + 11))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 16, 17 + 16))
     sys.exit(0)

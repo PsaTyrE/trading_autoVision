@@ -78,6 +78,21 @@ RISK_TIERS = [
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
 
 
+def rsi1h_veto(side, rsi1h) -> bool:
+    """True kalau RSI 1h sudah jenuh untuk arah tsb -> entry dilarang."""
+    if rsi1h is None:
+        return False
+    try:
+        v = float(rsi1h)
+    except Exception:
+        return False
+    if side == "LONG":
+        return v >= 58.0
+    if side == "SHORT":
+        return v <= 42.0
+    return False
+
+
 def entry_ts_from_trades(rows, fallback) -> int:
     """Ambil waktu fill paling awal (detik) sebagai ts entry sebenarnya."""
     try:
@@ -784,6 +799,23 @@ def scan_and_enter(t):
                 continue
             if side_str == "SHORT" and _smc_sweep == "bullish_liquidity_sweep":
                 log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - sweep low rejection detected")
+                continue
+
+            # HARD FILTER LINTAS TF: RSI 1h wajib tidak jenuh.
+            # Veto RSI lama cuma pakai TF sinyal -> sinyal 4h lolos walau 1h vertikal
+            # (INJ: 4h RSI 57.2 lolos < 58, padahal 1h RSI 81.5 -> rugi -1.01R).
+            _rsi1h = None
+            try:
+                with contextlib.redirect_stdout(sys.stderr):
+                    _o1 = t.exchange.fetch_ohlcv(sym, timeframe="1h", limit=320)
+                _d1 = pd.DataFrame(_o1, columns=["t", "o", "h", "l", "c", "v"])
+                _d1 = _d1[_d1.t + 3600000 <= int(time.time() * 1000)]
+                if len(_d1) >= strategy.MIN_BARS:
+                    _rsi1h = float(strategy.features(_d1).iloc[-1]["rsi"])
+            except Exception as _e1:
+                log(f"RSI 1h check skip {sym}: {_e1}")
+            if rsi1h_veto(side_str, _rsi1h):
+                log(f"ORCHESTRATOR HARD VETO: {sym} {side_str} rejected - RSI 1h jenuh ({float(_rsi1h):.1f}, TF sinyal {_tf}) DILARANG {('BELI DI PUCUK' if side_str == 'LONG' else 'SELL DI DASAR')}")
                 continue
 
             # HARD FILTER: DILARANG BELI DI PUCUK (RSI Overbought / Di Luar Bollinger Bands / Zone Filter)
