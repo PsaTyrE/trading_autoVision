@@ -127,6 +127,35 @@ def load_state():
 
 def save_state(s):
     try:
+        # MERGE anti-clobber: proses cron yang jalan lama bisa punya salinan state
+        # basi dan menimpa active_trades yang baru ditulis proses lain.
+        try:
+            with open(STATE_FILE, "r") as _f:
+                _disk = json.load(_f)
+            _closed = set(s.get("closed_syms") or []) | set(_disk.get("closed_syms") or [])
+            if _closed:
+                s["closed_syms"] = sorted(_closed)
+
+            _d_at = _disk.get("active_trades") or {}
+            _m_at = s.get("active_trades") or {}
+            for _k, _v in _d_at.items():
+                if _k not in _m_at and _k not in _closed:
+                    _m_at[_k] = _v
+            s["active_trades"] = _m_at
+
+            _d_ex = _disk.get("excursions") or {}
+            _m_ex = s.get("excursions") or {}
+            for _k, _v in _d_ex.items():
+                if _k in _closed:
+                    continue
+                if _k not in _m_ex:
+                    _m_ex[_k] = _v
+                else:
+                    _m_ex[_k]["mfe_pct"] = max(float(_m_ex[_k].get("mfe_pct") or 0), float(_v.get("mfe_pct") or 0))
+                    _m_ex[_k]["mae_pct"] = min(float(_m_ex[_k].get("mae_pct") or 0), float(_v.get("mae_pct") or 0))
+            s["excursions"] = _m_ex
+        except Exception:
+            pass
         tmp = STATE_FILE + ".tmp"
         with open(tmp, "w") as f:
             json.dump(s, f, indent=2)
@@ -194,6 +223,23 @@ def log_close_if_flat(t, st):
         except Exception as e:
             log(f"close-log write error {sym}: {e}")
 
+        # --- catat MFE/MAE trade yang sudah selesai ---
+        try:
+            _e = (st.get("excursions") or {}).get(sym) or {}
+            _excf = os.path.join(BASE_DIR, "trade_excursion.csv")
+            _newx = not os.path.exists(_excf)
+            with open(_excf, "a", newline="") as f:
+                _w = csv.writer(f)
+                if _newx:
+                    _w.writerow(["ts", "symbol", "side", "entry", "net", "R", "mfe_pct", "mae_pct", "sl_pct"])
+                _slp = abs(float(at.get("entry") or 0) - float(at.get("sl") or 0)) / float(at.get("entry") or 1) * 100
+                _w.writerow([int(time.time()), sym, at["side"], at["entry"], round(net, 4), round(r, 2),
+                             _e.get("mfe_pct", 0.0), _e.get("mae_pct", 0.0), round(_slp, 3)])
+            if sym in (st.get("excursions") or {}):
+                del st["excursions"][sym]
+        except Exception as e:
+            log(f"excursion write error {sym}: {e}")
+
         try:
             with contextlib.redirect_stdout(sys.stderr):
                 t.cancel_all_orders(sym)
@@ -202,6 +248,10 @@ def log_close_if_flat(t, st):
 
         if sym in at_dict:
             del at_dict[sym]
+        _cl = st.get("closed_syms") or []
+        if sym not in _cl:
+            _cl.append(sym)
+        st["closed_syms"] = _cl
         if st.get("active_trade") and st["active_trade"].get("symbol") == sym:
             st["active_trade"] = None
         state_changed = True
@@ -292,6 +342,18 @@ def manage_open_positions(t):
 
         # Retrieve initial SL from active_trades dict or legacy
         trade_meta = at_dict.get(symbol) or (legacy_at if legacy_at and legacy_at.get("symbol") == symbol else {})
+        # ADOPT: posisi live tanpa catatan di state (misal state ke-reset) -> rekonstruksi
+        # biar trailing + pencatatan close tetap jalan.
+        if not trade_meta:
+            _adopt_sl = float(cur_sl or 0.0)
+            trade_meta = {"symbol": symbol, "side": side, "entry": entry, "qty": qty,
+                          "sl": _adopt_sl, "tp1": None, "tp2": None,
+                          "risk": round(qty * abs(entry - _adopt_sl), 4) if _adopt_sl else 0.0,
+                          "ts": int(time.time()), "adopted": True}
+            at_dict[symbol] = trade_meta
+            st["active_trades"] = at_dict
+            log(f"ADOPT {symbol} {side} qty {qty} entry {entry} sl {_adopt_sl} (tidak ada di state)")
+
         _sl0 = float(trade_meta.get("sl") or 0.0)
         # FALLBACK: kalau state nggak nyimpen SL, pakai SL yang benar-benar
         # aktif di exchange (algo/conditional order). Tanpa ini r_dist=0
@@ -312,6 +374,21 @@ def manage_open_positions(t):
             elif gain >= r_dist * 0.8:
                 # Protect capital: Move to Break-Even (entry) once gain reaches +0.8R
                 lock_sl = round(entry * 1.001, dec) if side == "LONG" else round(entry * 0.999, dec)
+
+        # --- MFE / MAE TRACKING ---
+        # MFE = puncak profit tertinggi (persen), MAE = drawdown terdalam.
+        # Ini SATU-SATUNYA cara tau apakah TP kita kepagian atau kekecengan.
+        try:
+            _exc = st.get("excursions") or {}
+            _e = _exc.get(symbol) or {"mfe_pct": 0.0, "mae_pct": 0.0}
+            if pnl_pct * 100 > float(_e.get("mfe_pct") or 0.0):
+                _e["mfe_pct"] = round(pnl_pct * 100, 3)
+            if pnl_pct * 100 < float(_e.get("mae_pct") or 0.0):
+                _e["mae_pct"] = round(pnl_pct * 100, 3)
+            _exc[symbol] = _e
+            st["excursions"] = _exc
+        except Exception:
+            pass
 
         log(f"HB {symbol} {side} qty {qty} px {cur_price} pnl {pnl_pct*100:+.2f}% gainR {gain/r_dist if r_dist else 0:.2f} sl {cur_sl or 0}")
 
@@ -352,6 +429,10 @@ def manage_open_positions(t):
                 except Exception as e:
                     log(f"Telegram notify error: {e}")
 
+    try:
+        save_state(st)
+    except Exception:
+        pass
     return managed_syms
 
 MAKER_TIMEOUT_SEC = 90
