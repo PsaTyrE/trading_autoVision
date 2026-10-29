@@ -293,6 +293,11 @@ def manage_open_positions(t):
         # Retrieve initial SL from active_trades dict or legacy
         trade_meta = at_dict.get(symbol) or (legacy_at if legacy_at and legacy_at.get("symbol") == symbol else {})
         _sl0 = float(trade_meta.get("sl") or 0.0)
+        # FALLBACK: kalau state nggak nyimpen SL, pakai SL yang benar-benar
+        # aktif di exchange (algo/conditional order). Tanpa ini r_dist=0
+        # dan trailing stop TIDAK PERNAH jalan (profit dibiarkan balik ke SL awal).
+        if _sl0 <= 0:
+            _sl0 = float(cur_sl or 0.0)
         r_dist = abs(entry - _sl0) if _sl0 else 0.0
         gain = (cur_price - entry) if side == "LONG" else (entry - cur_price)
 
