@@ -50,3 +50,13 @@ Dicatat otomatis ke `trade_excursion.csv`:
 2. Lanjut kalau expectancy >= +0.15R.
 3. Stop dan audit ulang kalau expectancy < 0.
 4. Jangan naikkan risk untuk mengejar target — itu bukan strategi, itu harapan.
+
+
+## Changelog keputusan (terdokumentasi, bukan drift)
+
+- **2026-10-29 23:30** — `MAX_DAILY_ENTRIES` 3 -> 6.
+  Alasan: cap entri harian tumpang tindih dengan `MAX_OPEN_POSITIONS=3`.
+  Dengan 3 slot, risiko total sudah dibatasi; cap entri cuma menghalangi
+  redeploy modal setelah TP kena di hari yang sama. Batas risiko TIDAK berubah
+  karena slot posisi, `MAX_EXPOSURE_MULT=2.0`, dan `MAX_DAILY_LOSS_PCT=5%` tetap.
+  `MAX_OPEN_POSITIONS` sengaja TIDAK dinaikkan — itu yang benar-benar menambah risiko.

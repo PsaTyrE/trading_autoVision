@@ -1,6 +1,6 @@
 {
   "day_key": "2026-10-29",
-  "day_entries": 3,
+  "day_entries": 0,
   "last_signal_ts": 1234567890,
   "active_trades": {
     "ZEC/USDT:USDT": {
@@ -47,7 +47,7 @@
       "mae_pct": 0.0
     },
     "UNI/USDT:USDT": {
-      "mfe_pct": 3.664,
+      "mfe_pct": 3.845,
       "mae_pct": 0.0
     }
   }
