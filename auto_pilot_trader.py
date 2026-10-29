@@ -780,9 +780,11 @@ def scan_and_enter(t):
                 pass
             continue
 
-        # 60% TP1, 25% TP2, 15% Runner (Frontloaded profit taking)
-        # Qty WAJIB dibulatkan KE BAWAH ke step exchange; kalau sisa < minimum,
-        # TP dilewati dan posisi dijaga SL + trailing (jangan sampai TP gagal total).
+        # === LADDER TP MULTI-LEVEL (adaptif, jumlah level menyesuaikan qty) ===
+        # Level berbasis R dari SL: 1.0R / 1.6R / 2.5R / 4.0R.
+        # Sisanya runner -> dipegang trailing stop biar bisa ikut tren panjang.
+        # Kalau qty terlalu kecil (step minimum exchange), level otomatis dikurangi
+        # dan minimal 1 unit tetap disisakan sebagai runner.
         try:
             with contextlib.redirect_stdout(sys.stderr):
                 _mk = t.exchange.market(resolved)
@@ -795,31 +797,40 @@ def scan_and_enter(t):
                 if _step <= 0:
                     _step = 1e-8
 
-                def _floor_q(x):
-                    v = round(math.floor((float(x) + 1e-12) / _step) * _step, 8)
-                    if v <= 0 or v < _minq:
-                        return 0.0
-                    return float(t.exchange.amount_to_precision(resolved, v))
+                _units = int(math.floor(float(qty) / _step + 1e-9))
+                _r = abs(float(fill) - float(sl_price))
+                _sign = 1.0 if side == "BUY" else -1.0
 
-                tp1_qty = _floor_q(qty * 0.60)
-                tp2_qty = _floor_q(qty * 0.25)
-                # sisakan runner: jangan biarkan total TP menghabiskan seluruh posisi
-                if tp1_qty + tp2_qty >= qty:
-                    if tp1_qty < qty:
-                        tp2_qty = 0.0
-                    else:
-                        tp1_qty = 0.0
-                        tp2_qty = 0.0
+                _placed = []
+                _runner_units = _units
+                if _units >= 2 and _r > 0:
+                    _runner_units = 1 if _units <= 4 else max(1, int(round(_units * 0.15)))
+                    _tp_units = _units - _runner_units
+                    _lvls = [1.0, 1.6, 2.5, 4.0][:max(1, min(4, _tp_units))]
+                    _w = [0.40, 0.28, 0.20, 0.12][:len(_lvls)]
+                    _sw = sum(_w)
+                    _w = [x / _sw for x in _w]
+                    _alloc = [max(1, int(round(_tp_units * x))) for x in _w]
+                    while sum(_alloc) > _tp_units and max(_alloc) > 1:
+                        _alloc[_alloc.index(max(_alloc))] -= 1
+                    while sum(_alloc) < _tp_units:
+                        _alloc[_alloc.index(max(_alloc))] += 1
 
-                if tp1_qty > 0:
-                    t.place_limit_order(sym, close_side, tp1_qty, tp1_price, reduce_only=True)
-                if tp2_qty > 0:
-                    t.place_limit_order(sym, close_side, tp2_qty, tp2_price, reduce_only=True)
+                    for _k, (_mult, _n) in enumerate(zip(_lvls, _alloc)):
+                        if _n <= 0:
+                            continue
+                        _q = float(t.exchange.amount_to_precision(resolved, _n * _step))
+                        if _q <= 0 or _q < _minq:
+                            continue
+                        _p = px(float(fill) + _sign * _r * _mult)
+                        t.place_limit_order(sym, close_side, _q, _p, reduce_only=True)
+                        _placed.append((_mult, _q, _p))
 
-                if tp1_qty <= 0 and tp2_qty <= 0:
-                    log(f"TP ladder SKIP {sym}: qty {qty} < step minimum {_minq} - posisi dijaga SL + trailing")
+                if _placed:
+                    _txt = " | ".join(f"TP{i+1} {q}@{p} ({m:g}R)" for i, (m, q, p) in enumerate(_placed))
+                    log(f"LADDER PLACED {sym}: {_txt} | Runner {round(_runner_units * _step, 8)}")
                 else:
-                    log(f"LADDER PLACED {sym}: TP1 {tp1_qty} @ {tp1_price} | TP2 {tp2_qty} @ {tp2_price} | Runner {round(qty - tp1_qty - tp2_qty, 4)}")
+                    log(f"TP ladder SKIP {sym}: qty {qty} < step minimum {_minq} - dijaga SL + trailing")
         except Exception as te:
             log(f"TP placement error {sym}: {te}")
 
