@@ -78,6 +78,18 @@ RISK_TIERS = [
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
 
 
+def runner_trail_sl(side, price, r_dist, dec=4):
+    """SL runner: ikut harga dengan jarak 0.75R (sesuai docstring modul, dulu tidak diimplementasi)."""
+    try:
+        price = float(price); r_dist = float(r_dist)
+    except Exception:
+        return None
+    if r_dist <= 0:
+        return None
+    off = r_dist * 0.75
+    return round(price - off, dec) if side == "LONG" else round(price + off, dec)
+
+
 def tp_leg_passed(side, tp, price) -> bool:
     """True kalau level TP sudah dilewati harga (pasang limit di sini = langsung eksekusi pasar)."""
     try:
@@ -439,6 +451,11 @@ def manage_open_positions(t):
             if gain >= r_dist * 2.0:
                 # Lock at least +1.25R profit when hitting +2.0R
                 lock_sl = round(entry + r_dist * 1.25, dec) if side == "LONG" else round(entry - r_dist * 1.25, dec)
+                # RUNNER TRAILING 0.75R: tanpa ini SL berhenti di 1.25R selamanya walau
+                # harga jalan ke 3R+ (XRP nyangkut di 1.2674 saat harga sudah 2.7R).
+                _rt = runner_trail_sl(side, cur_price, r_dist, dec)
+                if _rt is not None:
+                    lock_sl = max(lock_sl, _rt) if side == "LONG" else min(lock_sl, _rt)
             elif gain >= r_dist * 1.2:
                 # Lock +0.5R profit once gain crosses +1.2R
                 lock_sl = round(entry + r_dist * 0.5, dec) if side == "LONG" else round(entry - r_dist * 0.5, dec)
@@ -481,17 +498,25 @@ def manage_open_positions(t):
                     _q1 = float(t.exchange.amount_to_precision(symbol, qty * 0.60))
                     _q2 = float(t.exchange.amount_to_precision(symbol, qty * 0.25))
                     _re = []
+                    _missed = set(trade_meta.get("missed") or [])
                     for _qq, _tp in ((_q1, trade_meta["tp1"]), (_q2, trade_meta["tp2"])):
                         if _qq <= 0:
                             continue
                         _tpp = float(_tp)
                         if tp_leg_passed(side, _tpp, cur_price):
-                            log(f"TP MISSED {symbol}: level {_tpp} sudah dilewati harga {cur_price} - sisa ikut trailing")
+                            # log sekali saja per level, kalau tidak tiap 2 menit nulis ulang
+                            if _tpp not in _missed:
+                                log(f"TP MISSED {symbol}: level {_tpp} sudah dilewati harga {cur_price} - sisa ikut trailing")
+                                _missed.add(_tpp)
                             continue
                         with contextlib.redirect_stdout(sys.stderr):
                             _ok = t.place_limit_order(symbol, _cs, _qq, _tpp, reduce_only=True)
                         if _ok:
                             _re.append((_qq, _tpp))
+                    if _missed != set(trade_meta.get("missed") or []):
+                        trade_meta["missed"] = sorted(_missed)
+                        at_dict[symbol] = trade_meta
+                        st["active_trades"] = at_dict
                     if _re:
                         log(f"TP RE-ARM {symbol}: " + " | ".join(f"{q}@{p}" for q, p in _re) + " | runner trailing")
                 except Exception as te:

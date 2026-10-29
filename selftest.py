@@ -113,9 +113,14 @@ check("tp belum SHORT 1.20 vs 1.243", A.tp_leg_passed("SHORT", 1.20, 1.243) is F
 check("tp passed LONG 1.30 vs 1.35", A.tp_leg_passed("LONG", 1.30, 1.35) is True)
 check("tp belum LONG 1.40 vs 1.35", A.tp_leg_passed("LONG", 1.40, 1.35) is False)
 
+# --- 13. runner trailing 0.75R ---
+check("runner trail SHORT 1.2381 r0.0203", A.runner_trail_sl("SHORT", 1.2381, 0.0203, 4) == 1.2533)
+check("runner trail LONG 100 r2", A.runner_trail_sl("LONG", 100.0, 2.0, 2) == 98.5)
+check("runner trail r_dist 0 -> None", A.runner_trail_sl("LONG", 100.0, 0.0) is None)
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 20, 17 + 20))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 23, 17 + 23))
     sys.exit(0)
