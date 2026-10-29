@@ -94,9 +94,15 @@ check("loss cap allows profit", A.daily_loss_blocked(0.75, 55.0, 0.05) is False)
 check("loss cap safe on zero equity", A.daily_loss_blocked(-1.0, 0.0, 0.05) is False)
 check("loss cap exported", hasattr(A, "daily_loss_blocked") and hasattr(A, "day_pnl_from_income"))
 
+# --- 10. entry ts diambil dari fill paling awal (bukan now) ---
+check("entry_ts picks earliest fill",
+      A.entry_ts_from_trades([{"time": "1793300000000"}, {"time": "1793290000000"}], 1) == 1793290000)
+check("entry_ts falls back when empty", A.entry_ts_from_trades([], 12345) == 12345)
+check("entry_ts exported", hasattr(A, "entry_ts_from_trades"))
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 8, 17 + 8))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 11, 17 + 11))
     sys.exit(0)

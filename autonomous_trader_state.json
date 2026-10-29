@@ -2,53 +2,46 @@
   "day_key": "2026-10-29",
   "day_entries": 0,
   "last_signal_ts": 1234567890,
+  "closed_syms": [
+    "APR/USDT:USDT",
+    "INJ/USDT:USDT",
+    "UNI/USDT:USDT",
+    "ZEC/USDT:USDT"
+  ],
   "active_trades": {
-    "ZEC/USDT:USDT": {
-      "symbol": "ZEC/USDT:USDT",
-      "side": "LONG",
-      "entry": 1298.1200000000001,
-      "qty": 0.012,
-      "sl": 1257.07,
-      "tp1": null,
-      "tp2": null,
-      "risk": 0.4926,
-      "ts": 1793290944
+    "XRP/USDT:USDT": {
+      "symbol": "XRP/USDT:USDT",
+      "side": "SHORT",
+      "entry": 1.2928000000000002,
+      "qty": 32.4,
+      "sl": 1.3131,
+      "tp1": 1.2725,
+      "tp2": 1.2522,
+      "cluster": "MISC",
+      "ts": 1793295878,
+      "risk": 0.6582
     },
-    "APR/USDT:USDT": {
-      "symbol": "APR/USDT:USDT",
-      "side": "LONG",
-      "entry": 0.05479,
-      "qty": 92.0,
-      "sl": 0.0452,
-      "tp1": null,
-      "tp2": null,
-      "risk": 0.8823,
-      "ts": 1793290945
-    },
-    "UNI/USDT:USDT": {
-      "symbol": "UNI/USDT:USDT",
-      "side": "LONG",
-      "entry": 7.178,
-      "qty": 2.0,
-      "sl": 6.96,
-      "tp1": null,
-      "tp2": null,
-      "risk": 0.436,
-      "ts": 1793290945
+    "GTC/USDT:USDT": {
+      "symbol": "GTC/USDT:USDT",
+      "side": "SHORT",
+      "entry": 0.23829999999999998,
+      "qty": 54.9,
+      "sl": 0.25014,
+      "tp1": 0.22646,
+      "tp2": 0.21463,
+      "cluster": "MISC",
+      "ts": 1793307712,
+      "risk": 0.6498
     }
   },
   "excursions": {
-    "ZEC/USDT:USDT": {
-      "mfe_pct": 4.663,
-      "mae_pct": 0.0
+    "XRP/USDT:USDT": {
+      "mfe_pct": 4.533,
+      "mae_pct": -0.07
     },
-    "APR/USDT:USDT": {
-      "mfe_pct": 11.681,
-      "mae_pct": 0.0
-    },
-    "UNI/USDT:USDT": {
-      "mfe_pct": 3.845,
-      "mae_pct": 0.0
+    "GTC/USDT:USDT": {
+      "mfe_pct": 3.084,
+      "mae_pct": -1.977
     }
   }
 }

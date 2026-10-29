@@ -78,6 +78,15 @@ RISK_TIERS = [
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
 
 
+def entry_ts_from_trades(rows, fallback) -> int:
+    """Ambil waktu fill paling awal (detik) sebagai ts entry sebenarnya."""
+    try:
+        ts = [int(r["time"]) for r in (rows or [])]
+        return (min(ts) // 1000) if ts else int(fallback)
+    except Exception:
+        return int(fallback)
+
+
 def day_pnl_from_income(rows) -> float:
     """Jumlahkan PnL realisasi hari ini dari income Binance (pnl + fee + funding)."""
     tot = 0.0
@@ -376,10 +385,18 @@ def manage_open_positions(t):
         # biar trailing + pencatatan close tetap jalan.
         if not trade_meta:
             _adopt_sl = float(cur_sl or 0.0)
+            _ats = int(time.time())
+            try:
+                _raw_ad = str(symbol).split(":")[0].replace("/", "")
+                with contextlib.redirect_stdout(sys.stderr):
+                    _tr_ad = t.exchange.fapiPrivateGetUserTrades({"symbol": _raw_ad, "limit": 200})
+                _ats = entry_ts_from_trades(_tr_ad, _ats)
+            except Exception:
+                pass
             trade_meta = {"symbol": symbol, "side": side, "entry": entry, "qty": qty,
                           "sl": _adopt_sl, "tp1": None, "tp2": None,
                           "risk": round(qty * abs(entry - _adopt_sl), 4) if _adopt_sl else 0.0,
-                          "ts": int(time.time()), "adopted": True}
+                          "ts": _ats, "adopted": True}
             at_dict[symbol] = trade_meta
             st["active_trades"] = at_dict
             log(f"ADOPT {symbol} {side} qty {qty} entry {entry} sl {_adopt_sl} (tidak ada di state)")
@@ -450,14 +467,21 @@ def manage_open_positions(t):
             should_update = (side == "LONG" and lock_sl > cur_sl + eps) or \
                             (side == "SHORT" and (cur_sl == 0 or lock_sl < cur_sl - eps))
             if should_update:
-                log(f"Trailing: Locking profit on {symbol} -> Moving SL to {lock_sl}")
-                with contextlib.redirect_stdout(sys.stderr):
-                    t.set_protective_stop(symbol, lock_sl, amount=qty, position_side=side)
+                _sl_ok = False
                 try:
-                    msg = f"🔒 <b>[PROFIT LOCKED / TRAILING SL]</b>\nSymbol: <b>{symbol}</b> ({side})\nPrice: <b>${cur_price}</b> | SL Rapat: <b>${lock_sl}</b>\nStatus: Profit terkunci, sisa posisi anti-minus!"
-                    TelegramNotifier().send_message(msg)
+                    with contextlib.redirect_stdout(sys.stderr):
+                        t.set_protective_stop(symbol, lock_sl, amount=qty, position_side=side)
+                    _sl_ok = True
+                    log(f"Trailing: SL {symbol} {cur_sl or 0} -> {lock_sl} (placed OK)")
                 except Exception as e:
-                    log(f"Telegram notify error: {e}")
+                    log(f"Trailing FAILED {symbol} -> {lock_sl}: {e}")
+
+                if _sl_ok:
+                    try:
+                        msg = f"\U0001f512 <b>[PROFIT LOCKED / TRAILING SL]</b>\nSymbol: <b>{symbol}</b> ({side})\nPrice: <b>${cur_price}</b> | SL Rapat: <b>${lock_sl}</b>\nStatus: Profit terkunci, sisa posisi anti-minus!"
+                        TelegramNotifier().send_message(msg)
+                    except Exception as e:
+                        log(f"Telegram notify error: {e}")
 
     try:
         save_state(st)
