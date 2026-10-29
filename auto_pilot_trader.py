@@ -781,7 +781,8 @@ def scan_and_enter(t):
             continue
 
         # === LADDER TP MULTI-LEVEL (adaptif, jumlah level menyesuaikan qty) ===
-        # Level berbasis R dari SL: 1.0R / 1.6R / 2.5R / 4.0R.
+        # Level RAPAT berbasis R dari SL: 1.0R / 1.2R / 1.4R / 1.7R (hasil uji Monte Carlo:
+        # ladder rapat +0.48R/trade vs ladder lebar +0.38R/trade di vol normal).
         # Sisanya runner -> dipegang trailing stop biar bisa ikut tren panjang.
         # Kalau qty terlalu kecil (step minimum exchange), level otomatis dikurangi
         # dan minimal 1 unit tetap disisakan sebagai runner.
@@ -804,10 +805,10 @@ def scan_and_enter(t):
                 _placed = []
                 _runner_units = _units
                 if _units >= 2 and _r > 0:
-                    _runner_units = 1 if _units <= 4 else max(1, int(round(_units * 0.15)))
+                    _runner_units = 1 if _units <= 4 else max(1, int(round(_units * 0.10)))
                     _tp_units = _units - _runner_units
-                    _lvls = [1.0, 1.6, 2.5, 4.0][:max(1, min(4, _tp_units))]
-                    _w = [0.40, 0.28, 0.20, 0.12][:len(_lvls)]
+                    _lvls = [1.0, 1.2, 1.4, 1.7][:max(1, min(4, _tp_units))]
+                    _w = [0.26, 0.24, 0.22, 0.18][:len(_lvls)]
                     _sw = sum(_w)
                     _w = [x / _sw for x in _w]
                     _alloc = [max(1, int(round(_tp_units * x))) for x in _w]
