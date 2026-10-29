@@ -652,27 +652,15 @@ def scan_and_enter(t):
             log(f"DEBATE {sym}: {ai_res.action} conf {ai_res.confidence:.2f} | {ai_reason}")
 
             if ai_res.confidence < MIN_AI_CONF:
-                log(f"VETO: AI confidence {ai_res.confidence:.2f} < {MIN_AI_CONF} on {sym}")
-                try:
-                    TelegramNotifier().send_message(f"[AI DEBATE VETO: LOW CONF] {sym}\nSetup: {side_str} | Conf: {ai_res.confidence:.2f} < {MIN_AI_CONF}\nDebat: {ai_reason}")
-                except Exception:
-                    pass
+                log(f"VETO: AI confidence {ai_res.confidence:.2f} < {MIN_AI_CONF} on {sym} | {ai_reason}")
                 continue
 
             if ai_res.action == "HOLD":
-                log(f"VETO: AI HOLD, no confirmation on {sym} | {ai_reason}")
-                try:
-                    TelegramNotifier().send_message(f"[AI DEBATE VETO: HOLD] {sym}\nBear/Risk Officer memenangkan debat.\nAlasan: {ai_reason}")
-                except Exception:
-                    pass
+                log(f"VETO: AI HOLD on {sym} | {ai_reason}")
                 continue
 
             if ai_res.action in ("LONG", "SHORT") and ai_res.action != side_str:
-                log(f"VETO: AI disagrees ({ai_res.action} vs {side_str})")
-                try:
-                    TelegramNotifier().send_message(f"[AI DEBATE VETO: CONFLICT] {sym}\nTeknikal: {side_str} vs AI: {ai_res.action}\nDetail: {ai_reason}")
-                except Exception:
-                    pass
+                log(f"VETO: AI disagrees ({ai_res.action} vs {side_str}) on {sym} | {ai_reason}")
                 continue
 
         except Exception as ae:
