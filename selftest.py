@@ -118,9 +118,20 @@ check("runner trail SHORT 1.2381 r0.0203", A.runner_trail_sl("SHORT", 1.2381, 0.
 check("runner trail LONG 100 r2", A.runner_trail_sl("LONG", 100.0, 2.0, 2) == 98.5)
 check("runner trail r_dist 0 -> None", A.runner_trail_sl("LONG", 100.0, 0.0) is None)
 
+# --- 14. err_detail tidak boleh motong pesan ---
+_e1 = Exception("binanceusdm POST https://fapi.binance.com/fapi/v1/order\n 400 Bad Request {\"code\":-4164,\"msg\":\"notional too small\"}")
+_d1 = A.err_detail(_e1)
+check("err_detail simpan alasan", "notional too small" in _d1)
+check("err_detail satu baris", "\n" not in _d1)
+check("err_detail ada tipe", _d1.startswith("Exception"))
+check("err_detail kosong tetap jelas", A.err_detail(ValueError()) == "ValueError")
+class _FE(Exception):
+    code = -4164
+check("err_detail baca code", "code=-4164" in A.err_detail(_FE("x")))
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 23, 17 + 23))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 28, 17 + 28))
     sys.exit(0)

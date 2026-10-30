@@ -34,7 +34,7 @@ import pandas as pd
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE_DIR)
-from src.live_trader import BinanceFuturesTrader
+from src.live_trader import BinanceFuturesTrader, err_detail
 from src import strategy
 
 from dotenv import load_dotenv
@@ -534,7 +534,7 @@ def manage_open_positions(t):
                     _sl_ok = True
                     log(f"Trailing: SL {symbol} {cur_sl or 0} -> {lock_sl} (placed OK)")
                 except Exception as e:
-                    log(f"Trailing FAILED {symbol} -> {lock_sl}: {e}")
+                    log(f"Trailing FAILED {symbol} -> {lock_sl}: {err_detail(e)}")
 
                 if _sl_ok:
                     try:
@@ -1056,7 +1056,7 @@ def scan_and_enter(t):
                         if t.place_limit_order(sym, close_side, _q, _p, reduce_only=True):
                             _placed.append((_mult, _q, _p))
                         else:
-                            log(f"LADDER LEG FAILED {sym}: {_q}@{_p} ({_mult:g}R) tidak terpasang")
+                            log(f"LADDER LEG FAILED {sym}: {_q}@{_p} ({_mult:g}R) - {getattr(t, 'last_error', '')}")
 
                 if _placed:
                     _txt = " | ".join(f"TP{i+1} {q}@{p} ({m:g}R)" for i, (m, q, p) in enumerate(_placed))

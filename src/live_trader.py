@@ -13,6 +13,30 @@ from src.config import config
 
 logger = logging.getLogger(__name__)
 
+def err_detail(e) -> str:
+    """Detail error satu baris: tipe + pesan penuh + args + atribut ccxt.
+
+    Dulu semua tempat pakai f"...: {e}" dan yang keluar cuma
+    'binanceusdm POST https://fapi.binance.com/fapi/v1/order' tanpa kode/alasan
+    Binance, jadi kegagalan pasang order (XRP TP1) tidak bisa didiagnosa."""
+    try:
+        parts = [type(e).__name__]
+        msg = str(e) or ""
+        if msg:
+            parts.append(msg)
+        args = getattr(e, "args", ()) or ()
+        if args and not (len(args) == 1 and str(args[0]) == msg):
+            parts.append(f"args={args!r}")
+        for attr in ("code", "status", "http_status", "status_code"):
+            v = getattr(e, attr, None)
+            if v not in (None, "", 0):
+                parts.append(f"{attr}={v}")
+        out = " ".join(" ".join(str(p) for p in parts).split())
+        return out[:900]
+    except Exception:
+        return f"<err_detail gagal untuk {type(e).__name__}>"
+
+
 class BinanceFuturesTrader:
     """
     Executes orders on Binance Futures (USD-M) via CCXT.
@@ -703,7 +727,7 @@ class BinanceFuturesTrader:
                 )
                 return {"success": True, "closed": True, "order": order, "message": f"Posisi {symbol} ({pos['side']} {formatted_amount}) berhasil ditutup pada harga pasar."}
         except Exception as e:
-            print(f"[!] Error closing position on {symbol}: {e}")
+            print(f"[!] Error closing position on {symbol}: {err_detail(e)}")
             return {"success": False, "closed": False, "error": str(e)}
 
     def setup_symbol_settings(self, symbol: str, leverage: int = 5, margin_type: str = "ISOLATED"):
@@ -846,7 +870,7 @@ class BinanceFuturesTrader:
             return order
         except Exception as e:
             self.last_error = str(e)
-            print(f"[!] Error placing {side} limit order on {symbol} at {price}: {e}")
+            print(f"[!] Error placing {side} limit order on {symbol} at {price}: {err_detail(e)}")
             return None
 
     def get_ticker(self, symbol: str) -> Optional[Dict[str, Any]]:
@@ -918,7 +942,7 @@ class BinanceFuturesTrader:
             return order
         except Exception as e:
             self.last_error = str(e)
-            print(f"[!] Error placing {side} market order on {symbol} (amount: {amount}): {e}")
+            print(f"[!] Error placing {side} market order on {symbol} (amount: {amount}): {err_detail(e)}")
             return None
 
     def _raw_symbol(self, symbol: Optional[str]) -> Optional[str]:
@@ -955,7 +979,7 @@ class BinanceFuturesTrader:
         except Exception as e:
             self.conditional_orders_ok = False
             self.last_error = f"conditional-orders fetch failed: {e}"
-            print(f"[!] Error fetching conditional orders: {e}")
+            print(f"[!] Error fetching conditional orders: {err_detail(e)}")
             return []
 
     def cancel_conditional_orders(self, symbol: Optional[str] = None) -> int:
@@ -1229,7 +1253,7 @@ class BinanceFuturesTrader:
             return True
         except Exception as e:
             self.last_error = str(e)
-            print(f"[!] Failed to set protective stop on {symbol} @ {stop_price}: {e}")
+            print(f"[!] Failed to set protective stop on {symbol} @ {stop_price}: {err_detail(e)}")
             return False
 
     def execute_bracket_order(self, symbol: str, sizing: Dict[str, Any]) -> bool:
