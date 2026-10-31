@@ -78,6 +78,123 @@ RISK_TIERS = [
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
 
 
+_POSMETA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pos_meta.json")
+
+
+def load_pos_meta() -> dict:
+    try:
+        with open(_POSMETA) as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def save_pos_meta(m: dict) -> None:
+    try:
+        tmp = _POSMETA + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(m, f)
+        os.replace(tmp, _POSMETA)
+    except Exception as e:
+        log(f"save_pos_meta error: {e}")
+
+
+def backfill_pos_meta(symbol: str, entry: float, side: str, cur_sl: float, qty: float) -> dict:
+    """Isi pos_meta untuk posisi yang TIDAK punya trade_meta (mis. hasil ADOPT).
+
+    Tanpa ini r_dist=0 -> trailing mati total dan SL tidak pernah dikunci
+    (kejadian nyata: ZEC/BR/Q tidak punya trade_meta, SL beku di SL awal).
+    """
+    m = {"symbol": symbol, "entry": float(entry or 0), "side": str(side or "").upper(),
+         "sl": float(cur_sl or 0), "qty": float(qty or 0), "backfilled": True}
+    sym_info = None
+    try:
+        # risk dihitung dari jarak SL awal * qty (bukan dari state yang hilang)
+        m["risk"] = round(abs(m["entry"] - m["sl"]) * m["qty"], 6) if m["sl"] else 0.0
+    except Exception:
+        m["risk"] = 0.0
+    return m
+
+
+def trail_lock_pct(side, entry, pnl_pct, atr_pct):
+    """Kunci profit berbasis PERSEN gerak harga, bukan cuma R.
+
+    Kenapa perlu: R = 2xATR. Untuk koin liar (Q: ATR 17% -> 1R = 34%), ambang
+    0.8R baru kena setelah harga gerak ~27%, jadi profit +22% dibiarkan tanpa
+    kuncian sama sekali. Persen gerak itu ukuran yang sama di semua koin.
+
+    atr_pct = 1R dalam persen. Tahapan:
+      < 0.5R  : tidak kunci
+      0.5R    : BE
+      0.8R    : +0.25R
+      1.2R    : +0.5R
+      2.0R    : +1.0R
+    """
+    try:
+        pnl_pct = abs(float(pnl_pct)); atr_pct = float(atr_pct)
+    except Exception:
+        return None
+    if atr_pct <= 0:
+        return None
+    g = pnl_pct / atr_pct
+    if g < 0.5:
+        return None
+    if g >= 2.0:
+        lock = 1.0
+    elif g >= 1.2:
+        lock = 0.5
+    elif g >= 0.8:
+        lock = 0.25
+    else:
+        lock = 0.0
+    return lock
+
+
+def trail_lock_sl(side, entry, price, r_dist, dec=4):
+    """SL dinamis: kunci profit progresif sesuai gainR yang SUDAH tercapai.
+
+    <0.8R      -> None (biarkan SL awal)
+    0.8R..1.0R -> break-even
+    1.0R..1.5R -> 0.4R
+    1.5R..2.0R -> 0.8R
+    2.0R..3.0R -> 1.2R
+    >=3.0R     -> 1.5R
+    lalu di atas 2R ikut ratchet 0.75R dari harga terbaik (runner).
+
+    Dipakai otomatis untuk SEMUA posisi tiap siklus, jadi tidak perlu debat
+    per koin: begitu ada gerak yang layak dikunci, SL ikut naik sendiri.
+    """
+    try:
+        entry = float(entry); price = float(price); r_dist = float(r_dist)
+    except Exception:
+        return None
+    if r_dist <= 0 or entry <= 0:
+        return None
+    gain = (price - entry) if side == "LONG" else (entry - price)
+    g = gain / r_dist
+    if g < 0.8:
+        return None
+    if g >= 3.0:
+        lock = 1.5
+    elif g >= 2.0:
+        lock = 1.2
+    elif g >= 1.5:
+        lock = 0.8
+    elif g >= 1.0:
+        lock = 0.4
+    else:
+        lock = 0.0
+    lv = entry + r_dist * lock if side == "LONG" else entry - r_dist * lock
+    if lock == 0.0:
+        lv = entry * 1.001 if side == "LONG" else entry * 0.999
+    out = round(lv, dec)
+    if g >= 2.0:
+        rt = runner_trail_sl(side, price, r_dist, dec)
+        if rt is not None:
+            out = max(out, rt) if side == "LONG" else min(out, rt)
+    return out
+
+
 def runner_trail_sl(side, price, r_dist, dec=4):
     """SL runner: ikut harga dengan jarak 0.75R (sesuai docstring modul, dulu tidak diimplementasi)."""
     try:
@@ -261,6 +378,50 @@ def log_close_if_flat(t, st):
     live_symbols = {p.get("symbol") for p in live}
     state_changed = False
 
+    # TP PARSIAL: qty menyusut tapi posisi belum flat -> realized PnL-nya tidak
+    # pernah kecatat (Q: 112 -> 56 unit hilang dari akuntansi). Catat di sini,
+    # lalu geser baseline ts supaya tidak dobel waktu posisi akhirnya ditutup.
+    _live_qty = {p.get("symbol"): abs(float(p.get("contracts") or 0)) for p in live}
+    for at in list(ats):
+        sym = at.get("symbol")
+        if not sym or sym not in _live_qty:
+            continue
+        _q_now = _live_qty[sym]
+        _q0 = float(at.get("qty") or 0)
+        if _q0 <= 0 or _q_now >= _q0 * 0.999:
+            continue
+        raw = str(sym).split(":")[0].replace("/", "")
+        try:
+            with contextlib.redirect_stdout(sys.stderr):
+                _tr = t.exchange.fapiPrivateGetUserTrades({"symbol": raw, "limit": 200})
+            _since = int(at.get("ts", 0)) - 600
+            _rows = [x for x in _tr if int(x["time"]) >= _since * 1000]
+            _g = sum(float(x["realizedPnl"]) for x in _rows)
+            _f = sum(float(x["commission"]) for x in _rows)
+            _last = max((int(x["time"]) for x in _rows), default=0)
+        except Exception as e:
+            log(f"partial TP fetch error {sym}: {e}")
+            continue
+        _net = _g - _f
+        _risk = float(at.get("risk") or 0.0)
+        try:
+            new = not os.path.exists(CLOSED)
+            with open(CLOSED, "a", newline="") as f:
+                w = csv.writer(f)
+                if new:
+                    w.writerow(["ts", "symbol", "side", "entry", "qty", "gross", "fee", "net", "risk", "R"])
+                w.writerow([int(time.time()), sym + "/PARTIAL", at.get("side"), at.get("entry"),
+                            round(_q0 - _q_now, 8), round(_g, 4), round(_f, 4), round(_net, 4),
+                            _risk, round(_net / _risk, 2) if _risk else 0.0])
+        except Exception as e:
+            log(f"partial TP write error {sym}: {e}")
+            continue
+        log(f"PARTIAL TP {sym}: {_q0 - _q_now} unit closed, net {_net:+.4f} R {(_net/_risk if _risk else 0):+.2f} | sisa {_q_now}")
+        at["qty"] = _q_now
+        at["ts"] = int(_last / 1000) if _last else int(at.get("ts") or 0)
+        at_dict[sym] = at
+        state_changed = True
+
     for at in list(ats):
         sym = at.get("symbol")
         if not sym or sym in live_symbols:
@@ -384,7 +545,12 @@ def manage_open_positions(t):
     for pos in positions:
         symbol = pos["symbol"]
         qty = abs(float(pos["contracts"]))
-        entry = float(pos["entryPrice"])
+        entry = float(pos.get("entryPrice") or 0)
+        if entry <= 0:
+            entry = float((load_pos_meta().get(symbol) or {}).get("entry") or 0)
+        if entry <= 0:
+            log(f"SKIP {symbol}: entry price kosong, trailing dilewati")
+            continue
         side = "LONG" if str(pos.get("side", "")).lower() in ("long", "buy") else "SHORT"
         managed_syms.append(symbol)
 
@@ -437,6 +603,23 @@ def manage_open_positions(t):
             st["active_trades"] = at_dict
             log(f"ADOPT {symbol} {side} qty {qty} entry {entry} sl {_adopt_sl} (tidak ada di state)")
 
+        # trade_meta bisa HILANG (ADOPT / state clobber) -> pakai pos_meta, terakhir backfill
+        if not trade_meta:
+            _pm = load_pos_meta()
+            trade_meta = _pm.get(symbol) or {}
+            if not trade_meta:
+                # entry dari posisi exchange TIDAK boleh 0: kalau 0, gainR jadi 0
+                # dan trailing/SL-lock tidak pernah jalan. Ambil dari pos['entry'].
+                _en = float(entry or p.get("entry") or p.get("entryPrice") or 0)
+                if _en <= 0:
+                    log(f"POS META skip {symbol}: entry price tidak tersedia - trailing dilewati siklus ini")
+                else:
+                    entry = _en
+                    trade_meta = backfill_pos_meta(symbol, entry, side, cur_sl, qty)
+                if trade_meta:
+                    _pm[symbol] = trade_meta
+                    save_pos_meta(_pm)
+                    log(f"POS META backfill {symbol}: entry {entry} side {side} sl {cur_sl} qty {qty} risk {trade_meta.get('risk')}")
         _sl0 = float(trade_meta.get("sl") or 0.0)
         # FALLBACK: kalau state nggak nyimpen SL, pakai SL yang benar-benar
         # aktif di exchange (algo/conditional order). Tanpa ini r_dist=0
@@ -446,22 +629,25 @@ def manage_open_positions(t):
         r_dist = abs(entry - _sl0) if _sl0 else 0.0
         gain = (cur_price - entry) if side == "LONG" else (entry - cur_price)
 
-        lock_sl = None
-        if r_dist > 0:
-            if gain >= r_dist * 2.0:
-                # Lock at least +1.25R profit when hitting +2.0R
-                lock_sl = round(entry + r_dist * 1.25, dec) if side == "LONG" else round(entry - r_dist * 1.25, dec)
-                # RUNNER TRAILING 0.75R: tanpa ini SL berhenti di 1.25R selamanya walau
-                # harga jalan ke 3R+ (XRP nyangkut di 1.2674 saat harga sudah 2.7R).
-                _rt = runner_trail_sl(side, cur_price, r_dist, dec)
-                if _rt is not None:
-                    lock_sl = max(lock_sl, _rt) if side == "LONG" else min(lock_sl, _rt)
-            elif gain >= r_dist * 1.2:
-                # Lock +0.5R profit once gain crosses +1.2R
-                lock_sl = round(entry + r_dist * 0.5, dec) if side == "LONG" else round(entry - r_dist * 0.5, dec)
-            elif gain >= r_dist * 0.8:
-                # Protect capital: Move to Break-Even (entry) once gain reaches +0.8R
-                lock_sl = round(entry * 1.001, dec) if side == "LONG" else round(entry * 0.999, dec)
+        # SLAH SATU sumber logika (trail_lock_sl) supaya BE/ratchet tidak bisa
+        # lupa dipasang di satu cabang seperti sebelumnya. Semua posisi, tiap siklus.
+        # Kalau posisi sedang RUGI, tidak ada profit untuk dikunci. Tanpa guard ini,
+        # lock_sl dihitung di sisi yang salah dan SL diminta di bawah harga
+        # (BR: -2021 "Order would immediately trigger").
+        _in_profit = gain > 0
+        lock_sl = trail_lock_sl(side, entry, cur_price, r_dist, dec) if (r_dist > 0 and _in_profit) else None
+        # Lapis kedua: kalau gerak harga sudah besar tapi R masih kecil (koin
+        # volatil / SL lebar), kunci berdasarkan persen gerak, jangan tunggu 0.8R.
+        if entry > 0:
+            _atr_pct = abs(r_dist / entry) * 100 if r_dist else 0.0
+            _lk = trail_lock_pct(side, entry, abs(pnl_pct) * 100, _atr_pct) if (_atr_pct and _in_profit) else None
+            if _lk is not None:
+                _lv = entry + r_dist * _lk if side == "LONG" else entry - r_dist * _lk
+                _lv = round(_lv, dec) if _lk else round(entry * (1.001 if side == "LONG" else 0.999), dec)
+                if lock_sl is None:
+                    lock_sl = _lv
+                else:
+                    lock_sl = max(lock_sl, _lv) if side == "LONG" else min(lock_sl, _lv)
 
         # --- MFE / MAE TRACKING ---
         # MFE = puncak profit tertinggi (persen), MAE = drawdown terdalam.
@@ -527,12 +713,18 @@ def manage_open_positions(t):
             should_update = (side == "LONG" and lock_sl > cur_sl + eps) or \
                             (side == "SHORT" and (cur_sl == 0 or lock_sl < cur_sl - eps))
             if should_update:
+                # set_protective_stop MENELAN exception dan balik falsy. Dulu hasilnya
+                # diabaikan -> log nulis "placed OK" padahal Binance menolak -2021
+                # (BR: SL diminta di bawah harga). Sekarang cek return-nya.
                 _sl_ok = False
                 try:
                     with contextlib.redirect_stdout(sys.stderr):
-                        t.set_protective_stop(symbol, lock_sl, amount=qty, position_side=side)
-                    _sl_ok = True
-                    log(f"Trailing: SL {symbol} {cur_sl or 0} -> {lock_sl} (placed OK)")
+                        _res = t.set_protective_stop(symbol, lock_sl, amount=qty, position_side=side)
+                    _sl_ok = bool(_res)
+                    if _sl_ok:
+                        log(f"Trailing: SL {symbol} {cur_sl or 0} -> {lock_sl} (placed OK)")
+                    else:
+                        log(f"Trailing FAILED {symbol} -> {lock_sl}: {getattr(t, 'last_error', '') or 'set_protective_stop balik falsy'}")
                 except Exception as e:
                     log(f"Trailing FAILED {symbol} -> {lock_sl}: {err_detail(e)}")
 

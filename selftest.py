@@ -129,9 +129,33 @@ class _FE(Exception):
     code = -4164
 check("err_detail baca code", "code=-4164" in A.err_detail(_FE("x")))
 
+# --- 15. SL dinamis progressif (semua posisi) ---
+_e, _r = 0.04508, 0.01528   # Q: entry, 1R dalam harga
+check("gain 0.5R belum kunci", A.trail_lock_sl("SHORT", _e, _e - 0.5*_r, _r) is None)
+check("gain 0.8R -> BE", A.trail_lock_sl("SHORT", _e, _e - 0.85*_r, _r) == 0.045)
+check("gain 1.0R -> 0.4R", A.trail_lock_sl("SHORT", _e, _e - 1.1*_r, _r) == 0.0390)
+check("gain 1.5R -> 0.8R", A.trail_lock_sl("SHORT", _e, _e - 1.6*_r, _r) == 0.0329)
+check("gain 2.0R -> 1.2R", A.trail_lock_sl("SHORT", _e, _e - 2.1*_r, _r) == 0.0245)
+check("gain 3.0R -> 1.5R+", A.trail_lock_sl("SHORT", _e, _e - 3.2*_r, _r) <= 0.0222)
+check("LONG 0.8R -> BE", A.trail_lock_sl("LONG", 100.0, 108.0, 10.0) == 100.1)
+check("r_dist 0 -> None", A.trail_lock_sl("LONG", 100.0, 120.0, 0.0) is None)
+
+# --- 16. kunci profit berbasis persen (koin volatil) ---
+check("0.3R persen -> belum kunci", A.trail_lock_pct("SHORT", 0.045, 10.0, 34.0) is None)
+check("0.5R persen -> BE", A.trail_lock_pct("SHORT", 0.045, 17.0, 34.0) == 0.0)
+check("0.8R persen -> 0.25R", A.trail_lock_pct("SHORT", 0.045, 27.5, 34.0) == 0.25)
+check("1.2R persen -> 0.5R", A.trail_lock_pct("SHORT", 0.045, 41.0, 34.0) == 0.5)
+check("2.0R persen -> 1.0R", A.trail_lock_pct("SHORT", 0.045, 70.0, 34.0) == 1.0)
+check("atr 0 -> None", A.trail_lock_pct("SHORT", 0.045, 50.0, 0.0) is None)
+
+# --- 17. lock_sl tidak boleh muncul saat posisi rugi ---
+check("rugi SHORT -> tidak ada lock", A.trail_lock_sl("SHORT", 0.4769, 0.4974, 0.0407) is None)
+check("rugi LONG -> tidak ada lock", A.trail_lock_sl("LONG", 100.0, 95.0, 5.0) is None)
+check("profit SHORT 1.1R -> lock ada", A.trail_lock_sl("SHORT", 0.04508, 0.04508 - 1.1*0.01528, 0.01528) is not None)
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 28, 17 + 28))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 45, 17 + 45))
     sys.exit(0)
