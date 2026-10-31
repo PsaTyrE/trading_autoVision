@@ -360,6 +360,33 @@ def get_open_positions(t):
     with contextlib.redirect_stdout(sys.stderr):
         return [p for p in t.exchange.fetch_positions() if float(p.get("contracts") or 0) != 0]
 
+def _recon_fills(t, raw, st, sym):
+    """Ambil fill yang BELUM pernah dicatat, berdasarkan trade id.
+
+    Kenapa bukan window waktu: dulu kode menjumlah SEMUA fill sejak entry ts - 600s.
+    Untuk simbol yang pernah ditradingkan sebelumnya, fill lama ikut kejumlah
+    (ZEC ditulis +0.5877 padahal realized aslinya -0.0101) dan fill baru bisa
+    kelewat (BR ditulis -0.0853 padahal -0.4509). Trade id tidak bisa salah
+    hitung seperti itu.
+    """
+    seen = set(st.get("recon_ids", {}).get(sym) or [])
+    with contextlib.redirect_stdout(sys.stderr):
+        tr = t.exchange.fapiPrivateGetUserTrades({"symbol": raw, "limit": 500})
+    fresh = [x for x in tr if str(x.get("id")) not in seen]
+    fresh.sort(key=lambda x: int(x["time"]))
+    pnl = sum(float(x["realizedPnl"]) for x in fresh)
+    fee = sum(float(x["commission"]) for x in fresh)
+    return pnl, fee, [str(x.get("id")) for x in fresh], (int(fresh[-1]["time"]) if fresh else 0)
+
+
+def _mark_recon(st, sym, ids):
+    d = st.get("recon_ids") or {}
+    cur = list(d.get(sym) or [])
+    cur.extend(ids)
+    d[sym] = cur[-400:]
+    st["recon_ids"] = d
+
+
 def log_close_if_flat(t, st):
     """CLOSE_LOG: reconcile finished trades into trade_closed.csv with net USDT and R."""
     at_dict = st.get("active_trades") or {}
@@ -392,15 +419,11 @@ def log_close_if_flat(t, st):
             continue
         raw = str(sym).split(":")[0].replace("/", "")
         try:
-            with contextlib.redirect_stdout(sys.stderr):
-                _tr = t.exchange.fapiPrivateGetUserTrades({"symbol": raw, "limit": 200})
-            _since = int(at.get("ts", 0)) - 600
-            _rows = [x for x in _tr if int(x["time"]) >= _since * 1000]
-            _g = sum(float(x["realizedPnl"]) for x in _rows)
-            _f = sum(float(x["commission"]) for x in _rows)
-            _last = max((int(x["time"]) for x in _rows), default=0)
+            _g, _f, _pids, _last = _recon_fills(t, raw, st, sym)
         except Exception as e:
             log(f"partial TP fetch error {sym}: {e}")
+            continue
+        if not _pids:
             continue
         _net = _g - _f
         _risk = float(at.get("risk") or 0.0)
@@ -417,6 +440,7 @@ def log_close_if_flat(t, st):
             log(f"partial TP write error {sym}: {e}")
             continue
         log(f"PARTIAL TP {sym}: {_q0 - _q_now} unit closed, net {_net:+.4f} R {(_net/_risk if _risk else 0):+.2f} | sisa {_q_now}")
+        _mark_recon(st, sym, _pids)
         at["qty"] = _q_now
         at["ts"] = int(_last / 1000) if _last else int(at.get("ts") or 0)
         at_dict[sym] = at
@@ -429,15 +453,11 @@ def log_close_if_flat(t, st):
 
         raw = str(sym).split(":")[0].replace("/", "")
         pnl = fee = 0.0
+        _ids = []
         n_tr = 0
         try:
-            with contextlib.redirect_stdout(sys.stderr):
-                trades = t.exchange.fapiPrivateGetUserTrades({"symbol": raw, "limit": 100})
-                for x in trades:
-                    if int(x["time"]) >= (int(at.get("ts", 0)) - 600) * 1000:
-                        pnl += float(x["realizedPnl"])
-                        fee += float(x["commission"])
-                        n_tr += 1
+            pnl, fee, _ids, _last_ts = _recon_fills(t, raw, st, sym)
+            n_tr = len(_ids)
         except Exception as e:
             log(f"close-log fetch error {sym}: {e}")
 
@@ -482,6 +502,7 @@ def log_close_if_flat(t, st):
         except Exception as e:
             log(f"close-log cancel error {sym}: {e}")
 
+        _mark_recon(st, sym, _ids)
         if sym in at_dict:
             del at_dict[sym]
         _cl = st.get("closed_syms") or []
