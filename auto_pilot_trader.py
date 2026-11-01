@@ -335,6 +335,14 @@ def save_state(s):
                     _m_at[_k] = _v
             s["active_trades"] = _m_at
 
+            # Simbol yang sedang TERBUKA tidak boleh nyangkut di closed_syms. Kalau
+            # nyangkut, merge di atas menolak memulihkannya dari disk -> meta posisi
+            # hidup hilang begitu ada proses yang menyimpan state basi (INJ kena ADOPT
+            # 22:56 lalu hilang dari state tiap selftest jalan).
+            if s.get("closed_syms"):
+                _live = set(_m_at.keys())
+                s["closed_syms"] = sorted(x for x in s["closed_syms"] if x not in _live)
+
             _d_ex = _disk.get("excursions") or {}
             _m_ex = s.get("excursions") or {}
             for _k, _v in _d_ex.items():

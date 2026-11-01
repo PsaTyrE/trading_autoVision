@@ -8,6 +8,12 @@ import math
 import os
 import sys
 import pandas as pd
+
+# Selftest TIDAK boleh menyentuh state live. Dulu dia menulis probe ke
+# autonomous_trader_state.json: day_entries balik 0, dan merge bisa membuang meta
+# posisi yang sedang terbuka. Sekarang state-nya file sekali pakai.
+os.environ["STATE_FILE"] = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".selftest_state.json")
+
 import auto_pilot_trader as A
 import src.strategy as strategy
 
@@ -153,9 +159,24 @@ check("rugi SHORT -> tidak ada lock", A.trail_lock_sl("SHORT", 0.4769, 0.4974, 0
 check("rugi LONG -> tidak ada lock", A.trail_lock_sl("LONG", 100.0, 95.0, 5.0) is None)
 check("profit SHORT 1.1R -> lock ada", A.trail_lock_sl("SHORT", 0.04508, 0.04508 - 1.1*0.01528, 0.01528) is not None)
 
+# --- 18. closed_syms tidak boleh memuat simbol yang sedang terbuka ---
+A.save_state({"day_key": "2099-01-01", "active_trades": {"ZZZ/USDT:USDT": {"symbol": "ZZZ/USDT:USDT", "side": "LONG"}},
+              "closed_syms": ["ZZZ/USDT:USDT", "AAA/USDT:USDT"]})
+_st = A.load_state()
+check("simbol hidup dibuang dari closed_syms", "ZZZ/USDT:USDT" not in (_st.get("closed_syms") or []))
+check("simbol tutup lama tetap di closed_syms", "AAA/USDT:USDT" in (_st.get("closed_syms") or []))
+check("state selftest bukan state live",
+      os.path.abspath(A.STATE_FILE) != os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                                    "autonomous_trader_state.json")))
+
+try:
+    os.remove(A.STATE_FILE)
+except Exception:
+    pass
+
 if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 45, 17 + 45))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 48, 17 + 48))
     sys.exit(0)
