@@ -421,6 +421,70 @@ def _mark_recon(st, sym, ids):
     st["recon_ids"] = d
 
 
+SLIP = os.getenv("SLIP_FILE", os.path.join(BASE_DIR, "slippage.csv"))
+
+
+def _news_tag(ts_ms, window_min=45):
+    """Label saja: apakah detik close ini berdekatan dengan rilis berita merah USD.
+
+    Bukan untuk mengambil aksi apa pun. Tujuannya mengumpulkan bukti seberapa mahal
+    slippage saat berita, supaya keputusan berikutnya punya dasar angka.
+    """
+    try:
+        import datetime as _dt
+        evs = json.load(open(os.path.join(BASE_DIR, "forex_factory_cache.json"), encoding="utf-8"))
+    except Exception:
+        return 0, "", 0.0
+    try:
+        t0 = _dt.datetime.fromtimestamp(int(ts_ms) / 1000.0, _dt.timezone.utc)
+    except Exception:
+        return 0, "", 0.0
+    best_d = None
+    best_t = ""
+    for e in evs or []:
+        if str(e.get("impact", "")).strip().lower() != "high":
+            continue
+        if str(e.get("country", "")).strip().upper() not in ("USD", "ALL"):
+            continue
+        try:
+            ed = _dt.datetime.fromisoformat(str(e.get("date")))
+        except Exception:
+            continue
+        if ed.tzinfo is None:
+            ed = ed.replace(tzinfo=_dt.timezone.utc)
+        d = (ed - t0).total_seconds() / 60.0
+        if best_d is None or abs(d) < abs(best_d):
+            best_d, best_t = d, str(e.get("title") or "")
+    if best_d is None:
+        return 0, "", 0.0
+    return (1 if abs(best_d) <= window_min else 0), best_t, round(best_d, 1)
+
+
+def _recon_slip(t, raw, ids, sl_price, side):
+    """Harga SL yang dipasang vs harga fill sebenarnya.
+
+    SL kita STOP_MARKET: begitu tersentuh jadi market order, jadi saat berita merah
+    fill bisa jauh di belakang SL. Tanpa catatan ini, "rugi 1R" cuma asumsi.
+    """
+    try:
+        sl_price = float(sl_price or 0)
+        want = set(str(i) for i in (ids or []))
+        if sl_price <= 0 or not want:
+            return None
+        with contextlib.redirect_stdout(sys.stderr):
+            tr = t.exchange.fapiPrivateGetUserTrades({"symbol": raw, "limit": 500})
+        f = [x for x in tr if str(x.get("id")) in want]
+        qsum = sum(abs(float(x.get("qty") or 0)) for x in f)
+        if qsum <= 0:
+            return None
+        avg = sum(abs(float(x.get("qty") or 0)) * float(x.get("price") or 0) for x in f) / qsum
+        adverse = (sl_price - avg) if str(side).upper() == "LONG" else (avg - sl_price)
+        return {"fill": avg, "sl": sl_price,
+                "slip_pct": adverse / sl_price * 100.0, "slip_usd": adverse * qsum}
+    except Exception:
+        return None
+
+
 def log_close_if_flat(t, st):
     """CLOSE_LOG: reconcile finished trades into trade_closed.csv with net USDT and R."""
     at_dict = st.get("active_trades") or {}
@@ -543,6 +607,28 @@ def log_close_if_flat(t, st):
                 t.cancel_all_orders(sym)
         except Exception as e:
             log(f"close-log cancel error {sym}: {e}")
+
+        # --- SLIP-LOG: SL terpasang vs harga fill nyata ---
+        # SL kita STOP_MARKET: begitu tersentuh jadi market order, jadi saat berita merah
+        # fill bisa jauh di belakang SL. Tanpa catatan ini, "rugi 1R" cuma asumsi.
+        try:
+            _sl_ref = float(at.get("sl_live") or at.get("sl") or 0)
+            _sp = _recon_slip(t, raw, _ids, _sl_ref, at.get("side"))
+            if _sp:
+                _nf, _nt, _nd = _news_tag(int(time.time() * 1000))
+                _newsp = not os.path.exists(SLIP)
+                with open(SLIP, "a", newline="") as f:
+                    _w2 = csv.writer(f)
+                    if _newsp:
+                        _w2.writerow(["ts", "symbol", "side", "sl", "fill", "slip_pct",
+                                      "slip_usd", "near_news", "news_title", "mins_to_news"])
+                    _w2.writerow([int(time.time()), sym, at.get("side"), round(_sp["sl"], 8),
+                                  round(_sp["fill"], 8), round(_sp["slip_pct"], 4),
+                                  round(_sp["slip_usd"], 4), _nf, _nt, _nd])
+                log(f"SLIP {sym}: SL {_sp['sl']:g} fill {_sp['fill']:g} "
+                    f"{_sp['slip_pct']:+.3f}% (${_sp['slip_usd']:+.4f}) news={_nf}")
+        except Exception as e:
+            log(f"slip log error {sym}: {e}")
 
         _mark_recon(st, sym, _ids)
         _mark_funding(st, sym, _ft)
@@ -725,6 +811,16 @@ def manage_open_positions(t):
                 _e["mae_pct"] = round(pnl_pct * 100, 3)
             _exc[symbol] = _e
             st["excursions"] = _exc
+        except Exception:
+            pass
+
+        # Simpan SL yang BENAR-BENAR terpasang di exchange. at["sl"] adalah SL awal dari
+        # sinyal; setelah trailing angka itu basi, dan pengukuran slippage jadi salah.
+        try:
+            if cur_sl:
+                trade_meta["sl_live"] = float(cur_sl)
+                at_dict[symbol] = trade_meta
+                st["active_trades"] = at_dict
         except Exception:
             pass
 
@@ -1375,6 +1471,50 @@ def scan_and_enter(t):
         except Exception as tge:
             log(f"Telegram notify error: {tge}")
 
+def news_heads_up(t):
+    """Info saja: ada posisi kebuka dan berita merah USD dekat -> kasih tau.
+
+    Tidak menggeser SL, tidak menutup posisi. Perlakuan posisi saat berita sengaja
+    DIBEKUKAN sampai ada >=5 sampel slippage nyata (lihat FREEZE.md Kandidat #3).
+    Dipanggil dari run(), bukan dari scan_and_enter(), supaya tetap jalan walau
+    entry sedang dimatikan atau slot penuh.
+    """
+    try:
+        res = ForexFactoryNewsSentinel().check_news_guard()
+        if not res.get("is_danger"):
+            return
+        ev = res.get("imminent_event") or {}
+        title = str(ev.get("title") or "high-impact")
+        pos = get_open_positions(t)
+        if not pos:
+            return
+        st = load_state() or {}
+        seen = st.get("news_alerted") or {}
+        now = int(time.time())
+        if now - int(seen.get(title) or 0) < 4 * 3600:
+            return
+        lines = []
+        for p in pos:
+            sym = p.get("symbol")
+            meta = (st.get("active_trades") or {}).get(sym) or {}
+            sl = float(meta.get("sl_live") or meta.get("sl") or 0)
+            mark = float(p.get("mark_price") or p.get("markPrice") or 0)
+            dist = abs(mark - sl) / mark * 100 if (mark and sl) else 0.0
+            lines.append(f"\u2022 {sym} {p.get('side')} SL {sl:g} ({dist:.1f}% dari harga)")
+        TelegramNotifier().send_message(
+            "\U0001f4f0 <b>BERITA MERAH DEKAT</b>\n"
+            f"{res.get('caution_reason', '')}\n\n"
+            "Posisi kebuka (SL TIDAK digeser, posisi TIDAK ditutup):\n"
+            + "\n".join(lines)
+            + "\n\nEntry baru ditahan otomatis. Perlakuan posisi dibekukan sampai ada data slippage."
+        )
+        seen[title] = now
+        st["news_alerted"] = seen
+        save_state(st)
+    except Exception as e:
+        log(f"news_heads_up error: {e}")
+
+
 def run():
     with contextlib.redirect_stdout(sys.stderr):
         t = BinanceFuturesTrader(is_testnet=False)
@@ -1384,6 +1524,7 @@ def run():
     sweep_orphan_orders(t)
 
     managed_syms = manage_open_positions(t)
+    news_heads_up(t)
     # Check open positions count vs limit
     open_pos = get_open_positions(t)
     if len(open_pos) < MAX_OPEN_POSITIONS:

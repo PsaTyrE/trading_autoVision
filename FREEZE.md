@@ -125,3 +125,35 @@ hanya menyentuh outlier (ZEC 49.6 jam MFE 0.35%, BR 41.6 jam MFE 0.00%), bukan t
 - **Risk tetap 2% equity.** Menaikkan risk untuk mengejar target bukan strategi.
 - **TP ladder tetap 1.0/1.2/1.4/1.7R.** 40.000 run Monte Carlo: ladder jauh +$0.873
   vs rapat +$0.783; dengan drift -4%/jam +$1.611 vs +$1.050.
+
+---
+
+## Kandidat #3 — PENGUKURAN, BUKAN PARAMETER (dikunci 2026-11-01)
+
+Konteks: news guard (`src/forex_factory_news.py`) menahan **entry** 30 menit sebelum
+sampai 45 menit sesudah berita merah USD. Posisi yang **sudah terbuka** tidak
+diperlakukan khusus.
+
+**Yang dibekukan** (bukan diubah — dinyatakan tidak akan diubah):
+Tidak ada perubahan perlakuan posisi terbuka menjelang berita merah: tidak melebarkan
+SL, tidak merapatkan SL, tidak menutup posisi. Berlaku sampai terkumpul **>= 5 sampel
+slippage nyata** di `slippage.csv` dengan `near_news = 1`.
+
+**Alasan angka** (posisi 2026-11-01, risk $1,14/trade):
+- Q: notional $1,61, SL 30% dari harga -> praktis kebal spike.
+- INJ: notional $24,54, SL 3,5% dari harga. Gap 2% lewat SL = +$0,49 (0,43R);
+  gap 5% = +$1,23 (1,08R).
+- Peluang ada posisi terbuka saat berita: rata-rata 0,19 posisi -> ~19%.
+- Ekspektasi kerugian tambahan kalau dibiarkan: ~0,19 x $0,70 = **~$0,13**.
+- Biaya tiap alternatif lebih besar: melebarkan SL menaikkan risiko di 100% trade;
+  merapatkan SL memotong pemenang (BTW: BE 0,5R mematikan MFE 4,88% -> 0,00R);
+  tutup-buka bayar fee dua kali dan kehilangan tren.
+
+**Kenapa dibekukan, bukan diserahkan ke selera:** supaya tidak ada aturan yang dibuat
+SETELAH melihat hasil — kesalahan yang hampir terulang pada kasus BE 0,5R.
+
+**Yang sudah jalan:** `slippage.csv` (SL terpasang vs harga fill nyata + label
+`near_news`), `sl_live` di state (SL aktif, bukan SL awal sinyal), dan notif Telegram
+heads-up kalau ada posisi terbuka dekat berita merah.
+
+**Keputusan perlakuan posisi: ditunda** sampai >= 5 sampel, lalu dievaluasi sekali.
