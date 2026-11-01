@@ -60,6 +60,10 @@ Dicatat otomatis ke `trade_excursion.csv`:
   redeploy modal setelah TP kena di hari yang sama. Batas risiko TIDAK berubah
   karena slot posisi, `MAX_EXPOSURE_MULT=2.0`, dan `MAX_DAILY_LOSS_PCT=5%` tetap.
   `MAX_OPEN_POSITIONS` sengaja TIDAK dinaikkan — itu yang benar-benar menambah risiko.
+- **2026-10-30** — `MAX_DAILY_ENTRIES` 6 -> **3 (revert)**.
+  Alasan: cap 6 membuat bot menumpuk entri di hari yang sama saat sinyal lemah,
+  sementara slot tetap 3. Tidak ada manfaat terukur, hanya menambah churn.
+  Nilai aktif sekarang: **3**. Entri di atas dipertahankan sebagai catatan sejarah.
 
 ## Changelog (bukan tuning, penegakan aturan)
 
@@ -69,3 +73,55 @@ Dicatat otomatis ke `trade_excursion.csv`:
   Ini penegakan aturan yang sudah ada, bukan parameter baru.
   Dampak terukur pada 8 entry terakhir: memblokir BNB, LTC, ONDO, INJ (semua rugi, total
   -1.73R) tanpa memblokir satu pun yang profit (ZEC +1.23R, XRP/GTC masih jalan).
+
+---
+
+## PRE-REGISTRASI — kandidat perubahan checkpoint 20
+
+**Ditulis 2026-11-01, saat 17 trade closed (3 trade lagi ke checkpoint).**
+Ambang di bawah DIKUNCI SEKARANG, sebelum trade ke-18/19/20 terlihat, supaya tidak
+bisa digeser setelah hasilnya diketahui. Kalau ambang diubah setelah checkpoint,
+itu curve-fitting dan seluruh evaluasi batal.
+
+### Kandidat #1 — Tolak entry jika SL > 5% dari harga
+
+Dasar bukti (17 close, per 2026-11-01):
+
+| Lebar SL | n | Total R | Avg R |
+|---|---|---|---|
+| <= 5% | 7 | **+5.90R** | **+0.84R** |
+| > 5% | 4 | **-1.49R** | **-0.37R** |
+
+Pemisahan 11 dari 11 benar. Korelasi SL% vs R = **-0.512**.
+
+Kasus penentu — APR: SL 17.50%, MFE **+14.55%**, hasil akhir **-0.04R**.
+Mekanisme: TP1 = 1.0R = lebar SL. Dengan SL 17.5%, TP1 berjarak 17.5% dan tangga
+lock 0.4R berjarak 7% — tidak ada yang pernah tersentuh, jadi profit 14.5% hilang
+tanpa pernah terkunci. Ini matematika, bukan nasib.
+
+**Biaya yang sudah diketahui dan diterima:** Q punya SL 33.9% (pelanggaran terparah)
+tapi sekarang +1.02R dan sudah membukukan +$0.937. Filter ini akan menolak Q sejak awal.
+Diterima karena agregat 7-vs-4 jauh lebih besar dari satu pemenang.
+
+**Ambang dikunci: 5.0%. Eksekusi di trade ke-20, apa pun hasil 3 trade berikutnya.**
+
+### Kandidat #2 — Stagnation stop
+
+Tutup posisi jika **umur >= 12 jam DAN MFE < 0.5R**.
+
+Dasar bukti: 4 trade dengan MFE < 1.5% menghasilkan avg **-0.36R**, tidak ada satu pun
+di atas +0.01R. Menunggu 24 jam membuat kerugian membesar ke -1R sebelum dipotong.
+
+Alasan 12 jam: median jarak antar close 3.1 jam, jadi 12 jam = ~4x median. Aturan ini
+hanya menyentuh outlier (ZEC 49.6 jam MFE 0.35%, BR 41.6 jam MFE 0.00%), bukan trade normal.
+
+**Ambang dikunci: 12 jam / 0.5R.**
+
+### Yang TIDAK diubah (dan alasannya)
+
+- **Max posisi tetap 3.** 5 slot x $1.14 = $5.70 = tepat ambang circuit breaker
+  (`max($5.00, 10% equity)`). 5 SL bersamaan = bot mati, bukan cuma rugi.
+  Rata-rata posisi terbuka hanya 0.19 — slot bukan bottleneck.
+- **Risk tetap 2% equity.** Menaikkan risk untuk mengejar target bukan strategi.
+- **TP ladder tetap 1.0/1.2/1.4/1.7R.** 40.000 run Monte Carlo: ladder jauh +$0.873
+  vs rapat +$0.783; dengan drift -4%/jam +$1.611 vs +$1.050.
