@@ -379,6 +379,40 @@ def _recon_fills(t, raw, st, sym):
     return pnl, fee, [str(x.get("id")) for x in fresh], (int(fresh[-1]["time"]) if fresh else 0)
 
 
+def _recon_funding(t, raw, sym, st, since_ms):
+    """Funding fee sejak posisi dibuka, sebagai BIAYA (positif).
+
+    Kenapa perlu: log_close_if_flat cuma menjumlah COMMISSION dari userTrades.
+    Funding dibayar per 8 jam dan tidak menempel di fill mana pun, jadi selama ini
+    luput total. BTW ditulis net +0.0028 padahal setelah funding -0.0031 hasilnya
+    -0.0003 (rugi). Dikembalikan sebagai delta supaya TP parsial dan close final
+    tidak menghitung periode yang sama dua kali.
+    """
+    try:
+        since_ms = int(since_ms or 0)
+    except Exception:
+        since_ms = 0
+    if since_ms <= 0:
+        return 0.0, 0.0
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            inc = t.exchange.fapiPrivateGetIncome({
+                "symbol": raw, "incomeType": "FUNDING_FEE",
+                "startTime": since_ms, "limit": 500,
+            })
+    except Exception:
+        return 0.0, 0.0
+    tot_cost = -sum(float(x.get("income") or 0) for x in inc)
+    seen = float((st.get("recon_funding") or {}).get(sym) or 0.0)
+    return tot_cost - seen, tot_cost
+
+
+def _mark_funding(st, sym, total_cost):
+    rf = st.get("recon_funding") or {}
+    rf[sym] = round(float(total_cost), 8)
+    st["recon_funding"] = rf
+
+
 def _mark_recon(st, sym, ids):
     d = st.get("recon_ids") or {}
     cur = list(d.get(sym) or [])
@@ -413,6 +447,7 @@ def log_close_if_flat(t, st):
         sym = at.get("symbol")
         if not sym or sym not in _live_qty:
             continue
+        at.setdefault("entry_ts", at.get("ts"))
         _q_now = _live_qty[sym]
         _q0 = float(at.get("qty") or 0)
         if _q0 <= 0 or _q_now >= _q0 * 0.999:
@@ -425,6 +460,8 @@ def log_close_if_flat(t, st):
             continue
         if not _pids:
             continue
+        _fd, _ft = _recon_funding(t, raw, sym, st, at.get("entry_ts") or at.get("ts") or 0)
+        _f += _fd
         _net = _g - _f
         _risk = float(at.get("risk") or 0.0)
         try:
@@ -441,6 +478,7 @@ def log_close_if_flat(t, st):
             continue
         log(f"PARTIAL TP {sym}: {_q0 - _q_now} unit closed, net {_net:+.4f} R {(_net/_risk if _risk else 0):+.2f} | sisa {_q_now}")
         _mark_recon(st, sym, _pids)
+        _mark_funding(st, sym, _ft)
         at["qty"] = _q_now
         at["ts"] = int(_last / 1000) if _last else int(at.get("ts") or 0)
         at_dict[sym] = at
@@ -465,6 +503,10 @@ def log_close_if_flat(t, st):
             log(f"close-log: no fills for {raw} since entry - retry next run")
             continue
 
+        _fd, _ft = _recon_funding(t, raw, sym, st, at.get("entry_ts") or at.get("ts") or 0)
+        if _fd:
+            log(f"FUNDING {sym}: {_fd:+.4f} (kumulatif {_ft:+.4f})")
+        fee += _fd
         net = pnl - fee
         risk = float(at.get("risk") or 0.0)
         r = net / risk if risk else 0.0
@@ -503,6 +545,7 @@ def log_close_if_flat(t, st):
             log(f"close-log cancel error {sym}: {e}")
 
         _mark_recon(st, sym, _ids)
+        _mark_funding(st, sym, _ft)
         if sym in at_dict:
             del at_dict[sym]
         _cl = st.get("closed_syms") or []
