@@ -169,6 +169,21 @@ check("state selftest bukan state live",
       os.path.abspath(A.STATE_FILE) != os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                                     "autonomous_trader_state.json")))
 
+# --- 19. re-arm TP: yang dipulihkan adalah leg NYATA, bukan level strategi ---
+_tm_new = {"entry": 0.004979, "sl": 0.005892,
+           "tp_legs": [[1.0, 262.0, 0.004066], [1.2, 241.0, 0.003883]]}
+check("re-arm pakai tp_legs kalau ada",
+      A._tp_legs_for(_tm_new, "SHORT", 1005) == [(262.0, 0.004066), (241.0, 0.003883)])
+
+_tm_old = {"entry": 0.004979, "sl": 0.005892, "tp1": 0.004066, "tp2": 0.003152}
+_legs_old = A._tp_legs_for(_tm_old, "SHORT", 1005)
+check("re-arm rekonstruksi 1,0/1,2/1,4/1,7R (bukan 2R level strategi)",
+      len(_legs_old) == 4 and abs(_legs_old[1][1] - 0.003883) < 1e-6
+      and all(abs(_p - 0.003152) > 1e-6 for _q, _p in _legs_old))
+
+check("re-arm tanpa info entry/SL -> tidak memasang apa pun",
+      A._tp_legs_for({"entry": 0, "sl": 0}, "SHORT", 10) == [])
+
 try:
     os.remove(A.STATE_FILE)
 except Exception:
@@ -178,5 +193,5 @@ if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 48, 17 + 48))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 51, 17 + 51))
     sys.exit(0)

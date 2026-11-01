@@ -157,3 +157,20 @@ SETELAH melihat hasil — kesalahan yang hampir terulang pada kasus BE 0,5R.
 heads-up kalau ada posisi terbuka dekat berita merah.
 
 **Keputusan perlakuan posisi: ditunda** sampai >= 5 sampel, lalu dievaluasi sekali.
+
+## Perbaikan bug 2026-11-02 (bukan perubahan parameter strategi)
+
+- **Re-arm TP memulihkan level yang salah.** `trade_record["tp2"]` = level strategi (≈2R),
+  padahal ladder memasang TP2 di **1,2R**. Kalau order TP hilang, leg yang dipulihkan duduk di
+  harga yang tidak pernah dipakai strategi (JCT: state 0,003152 vs order nyata 0,003883).
+  Sekarang entry menyimpan `tp_legs` (leg yang benar-benar terpasang) dan `tp_failed`
+  (leg yang gagal dipasang). Re-arm hanya memulihkan leg yang **gagal**, atau membangun ulang
+  seluruh ladder kalau tidak ada order TP sama sekali. Leg yang sudah kena TP tidak pernah
+  dipasang ulang (percobaan Q 00:12:07 hampir menaruh 11 unit di 0,026744 yang sudah fill).
+- **`save_state()` gagal di `manage_open_positions()` ditelan senyap** → sekarang tercatat
+  `STATE SAVE FAILED (manage): ...`. Kalau tulis state gagal, `sl_live` dan akuntansi TP
+  parsial hilang tanpa jejak.
+- **Posisi ADOPT ditandai `risk_est: true`.** `risk`-nya dihitung dari SL yang **sedang**
+  terpasang (bisa sudah trailing), bukan SL awal → R-nya taksiran. Jangan dihitung sebagai
+  sampel checkpoint 20 trade tanpa catatan.
+- Selftest: **68 check** (3 check baru untuk `_tp_legs_for`).

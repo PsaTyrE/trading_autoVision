@@ -493,6 +493,41 @@ def _recon_slip(t, raw, ids, sl_price, side):
         return None
 
 
+def _tp_legs_for(tm, side, qty, cur_price=None):
+    """Level TP yang BENAR-BENAR dipasang saat entry, bukan level strategi.
+
+    Dulu re-arm memakai tm["tp1"]/tm["tp2"] (level strategi, tp2 ~ 2R) padahal
+    ladder menaruh TP2 di 1,2R. Akibatnya kalau order TP hilang, leg yang
+    dipulihkan duduk di harga yang tidak pernah dipakai strategi. Sekarang
+    urutannya: tp_legs (hasil nyata) -> rekonstruksi dari entry/SL -> fallback lama.
+    """
+    out = []
+    for l in (tm.get("tp_legs") or []):
+        try:
+            out.append((float(l[1]), float(l[2])))
+        except Exception:
+            continue
+    if out:
+        return out
+    try:
+        _en = float(tm.get("entry") or 0)
+        _sl = float(tm.get("sl") or 0)
+    except Exception:
+        _en = _sl = 0.0
+    if _en > 0 and _sl > 0 and abs(_en - _sl) > 0:
+        _r = abs(_en - _sl)
+        _sg = 1.0 if str(side).upper() == "LONG" else -1.0
+        _lv = [1.0, 1.2, 1.4, 1.7]
+        _w = [0.26, 0.24, 0.22, 0.18]
+        _sw = sum(_w)
+        for _m, _ww in zip(_lv, _w):
+            out.append((max(0.0, float(qty) * (_ww / _sw) * 0.9), _en + _sg * _r * _m))
+        return out
+    if tm.get("tp1") and tm.get("tp2"):
+        return [(float(qty) * 0.60, float(tm["tp1"])), (float(qty) * 0.25, float(tm["tp2"]))]
+    return []
+
+
 def log_close_if_flat(t, st):
     """CLOSE_LOG: reconcile finished trades into trade_closed.csv with net USDT and R."""
     at_dict = st.get("active_trades") or {}
@@ -754,9 +789,12 @@ def manage_open_positions(t):
             except Exception:
                 pass
             trade_meta = {"symbol": symbol, "side": side, "entry": entry, "qty": qty,
-                          "sl": _adopt_sl, "tp1": None, "tp2": None,
+                          "sl": _adopt_sl, "tp1": None, "tp2": None, "tp_legs": [],
                           "risk": round(qty * abs(entry - _adopt_sl), 4) if _adopt_sl else 0.0,
+                          "risk_est": True,
                           "ts": _ats, "adopted": True}
+            # risk di sini dihitung dari SL yang SEDANG terpasang (bisa sudah trailing),
+            # bukan SL awal -> R-nya taksiran. Ditandai biar tidak dihitung sebagai sampel.
             at_dict[symbol] = trade_meta
             st["active_trades"] = at_dict
             log(f"ADOPT {symbol} {side} qty {qty} entry {entry} sl {_adopt_sl} (tidak ada di state)")
@@ -841,40 +879,85 @@ def manage_open_positions(t):
         except Exception:
             _oo = None
 
-        if _oo is not None and trade_meta.get("tp1") and trade_meta.get("tp2"):
+        if _oo is not None:
             _cs = "sell" if side == "LONG" else "buy"
-            if not [o for o in _oo if str(o.get("side") or "").lower() == _cs]:
-                # Dulu syaratnya qty == qty awal, jadi re-arm MATI PERMANEN begitu satu TP
-                # kena: leg yang gagal pasang (XRP TP1) tidak pernah balik. Sekarang skala
-                # ke sisa posisi, dan level yang sudah dilewati harga di-skip (limit di
-                # harga lampau = langsung eksekusi pasar, bukan TP).
+            _rf = int(trade_meta.get("rearm_fail") or 0)
+            _open_close = [o for o in _oo if str(o.get("side") or "").lower() == _cs]
+            _have_px, _have_q = [], 0.0
+            for o in _open_close:
                 try:
-                    _q1 = float(t.exchange.amount_to_precision(symbol, qty * 0.60))
-                    _q2 = float(t.exchange.amount_to_precision(symbol, qty * 0.25))
-                    _re = []
+                    _have_px.append(float(o.get("price") or 0))
+                    _have_q += float(o.get("amount") or 0)
+                except Exception:
+                    continue
+            # Kandidat re-arm:
+            #  (a) leg yang GAGAL dipasang saat entry -> dijamin belum pernah terisi
+            #  (b) tidak ada order TP sama sekali -> bangun ulang seluruh ladder
+            _fail_legs = [l for l in (trade_meta.get("tp_failed") or [])
+                          if isinstance(l, (list, tuple)) and len(l) >= 3]
+            _cand = [(float(_l[1]), float(_l[2]), _i) for _i, _l in enumerate(_fail_legs)]
+            if not _cand and not _open_close:
+                _cand = [(float(_q), float(_p), None) for _q, _p in _tp_legs_for(trade_meta, side, qty)]
+            if _cand and _rf < 3:
+                try:
                     _missed = set(trade_meta.get("missed") or [])
-                    for _qq, _tp in ((_q1, trade_meta["tp1"]), (_q2, trade_meta["tp2"])):
-                        if _qq <= 0:
+                    _rem = float(qty) - _have_q
+                    _plan = []
+                    for _lq, _tpp, _idx in _cand:
+                        _dup = False
+                        for _hp in _have_px:
+                            if _hp > 0 and abs(_tpp - _hp) <= max(abs(_tpp) * 2e-4, 1e-12):
+                                _dup = True
+                                break
+                        if _dup:
                             continue
-                        _tpp = float(_tp)
                         if tp_leg_passed(side, _tpp, cur_price):
                             # log sekali saja per level, kalau tidak tiap 2 menit nulis ulang
                             if _tpp not in _missed:
                                 log(f"TP MISSED {symbol}: level {_tpp} sudah dilewati harga {cur_price} - sisa ikut trailing")
                                 _missed.add(_tpp)
                             continue
+                        if _rem <= 0:
+                            break
+                        try:
+                            _qq = float(t.exchange.amount_to_precision(symbol, min(_lq, _rem)))
+                        except Exception as _qe:
+                            log(f"TP re-arm amount error {symbol}: {err_detail(_qe)}")
+                            break
+                        if _qq <= 0:
+                            continue
+                        _rem -= _qq
+                        _plan.append((_qq, _tpp, _idx))
+                    _re, _bad = [], []
+                    for _qq, _tpp, _idx in _plan:
                         with contextlib.redirect_stdout(sys.stderr):
                             _ok = t.place_limit_order(symbol, _cs, _qq, _tpp, reduce_only=True)
                         if _ok:
-                            _re.append((_qq, _tpp))
+                            _re.append((_qq, _tpp, _idx))
+                        else:
+                            _bad.append((_qq, _tpp, _idx))
+                    _fix = [_i for _q, _p, _i in _re if _i is not None]
+                    if _fix:
+                        _tl = list(trade_meta.get("tp_legs") or [])
+                        for _i in _fix:
+                            _tl.append(_fail_legs[_i])
+                        trade_meta["tp_legs"] = _tl
+                        trade_meta["tp_failed"] = [l for _i, l in enumerate(_fail_legs) if _i not in _fix]
                     if _missed != set(trade_meta.get("missed") or []):
                         trade_meta["missed"] = sorted(_missed)
+                    if _fix or _missed:
                         at_dict[symbol] = trade_meta
                         st["active_trades"] = at_dict
                     if _re:
-                        log(f"TP RE-ARM {symbol}: " + " | ".join(f"{q}@{p}" for q, p in _re) + " | runner trailing")
+                        log(f"TP RE-ARM {symbol}: " + " | ".join(f"{q}@{p}" for q, p, _ in _re) + " | runner trailing")
+                    if _bad:
+                        trade_meta["rearm_fail"] = _rf + 1
+                        at_dict[symbol] = trade_meta
+                        st["active_trades"] = at_dict
+                        log(f"TP RE-ARM GAGAL {symbol}: " + " | ".join(f"{q}@{p}" for q, p, _ in _bad) +
+                            f" ({getattr(t, 'last_error', '') or 'place_limit_order balik falsy'}) percobaan {_rf + 1}/3")
                 except Exception as te:
-                    log(f"TP re-arm failed {symbol}: {te}")
+                    log(f"TP re-arm failed {symbol}: {err_detail(te)}")
 
         if lock_sl:
             eps = max(abs(cur_price) * 1e-4, 10.0 ** -dec)
@@ -905,8 +988,10 @@ def manage_open_positions(t):
 
     try:
         save_state(st)
-    except Exception:
-        pass
+    except Exception as e:
+        # Dulu ditelan: kalau tulis state gagal, sl_live & akuntansi parsial hilang
+        # tanpa satu baris pun di log.
+        log(f"STATE SAVE FAILED (manage): {err_detail(e)}")
     return managed_syms
 
 MAKER_TIMEOUT_SEC = 90
@@ -1388,6 +1473,7 @@ def scan_and_enter(t):
                 _sign = 1.0 if side == "BUY" else -1.0
 
                 _placed = []
+                _failed = []
                 _tried = 0
                 _runner_units = _units
                 if _units >= 2 and _r > 0:
@@ -1416,6 +1502,7 @@ def scan_and_enter(t):
                         if t.place_limit_order(sym, close_side, _q, _p, reduce_only=True):
                             _placed.append((_mult, _q, _p))
                         else:
+                            _failed.append((_mult, _q, _p))
                             log(f"LADDER LEG FAILED {sym}: {_q}@{_p} ({_mult:g}R) - {getattr(t, 'last_error', '')}")
 
                 if _placed:
@@ -1429,9 +1516,19 @@ def scan_and_enter(t):
             log(f"TP placement error {sym}: {te}")
 
         risk_real = qty * sl_dist
+        # Leg TP yang benar-benar terpasang (mult, qty, harga) - sumber re-arm.
+        try:
+            _legs_rec = [[round(float(m), 2), float(q), float(p)] for (m, q, p) in _placed]
+        except Exception:
+            _legs_rec = []
+        try:
+            _legs_fail_rec = [[round(float(m), 2), float(q), float(p)] for (m, q, p) in _failed]
+        except Exception:
+            _legs_fail_rec = []
         trade_record = {
             "symbol": sym, "side": side_str, "entry": fill, "qty": qty,
             "sl": sl_price, "tp1": tp1_price, "tp2": tp2_price,
+            "tp_legs": _legs_rec, "tp_failed": _legs_fail_rec,
             "cluster": cluster, "ts": int(time.time()), "risk": round(risk_real, 4)
         }
 
@@ -1470,7 +1567,7 @@ def scan_and_enter(t):
         try:
             TelegramNotifier().notify_trade_opened(sym, {
                 "action": side_str, "entry_price": fill, "stop_loss": sl_price,
-                "take_profit_1": f"{tp1_price} (40%) & {tp2_price} (40%)",
+                "take_profit_1": (" | ".join(f"{p} ({m:g}R)" for m, q, p in _placed) if _placed else f"{tp1_price} / {tp2_price}"),
                 "leverage": MAX_LEVERAGE,
                 "required_margin_usdt": round(notional / MAX_LEVERAGE, 2),
                 "risk_amount_usdt": round(risk_real, 2),
