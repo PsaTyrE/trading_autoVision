@@ -92,6 +92,8 @@ REARM_MAX_TRIES = 3               # batas percobaan re-arm per posisi
 TP_DUP_TOL = 2e-4                 # toleransi harga saat cek "order TP ini sudah ada?"
 NEWS_TAG_TITLE_WINDOW_MIN = 180   # judul berita cuma ditempel kalau |menit| <= ini
 BREAKER_EQUITY_PCT = 0.10         # circuit breaker minimal = 10% equity
+BB_CLEAR_TOL = 0.015              # anti-pucuk: harga wajib 1,5% di luar Bollinger
+QTY_COVER_TOL = 0.999             # stop dianggap menutup posisi kalau qty >= 99,9%
 
 
 
@@ -203,7 +205,7 @@ def trail_lock_sl(side, entry, price, r_dist, dec=4):
         lock = 0.0
     lv = entry + r_dist * lock if side == "LONG" else entry - r_dist * lock
     if lock == 0.0:
-        lv = entry * 1.001 if side == "LONG" else entry * 0.999
+        lv = entry * 1.001 if side == "LONG" else entry * QTY_COVER_TOL
     out = round(lv, dec)
     if g >= 2.0:
         rt = runner_trail_sl(side, price, r_dist, dec)
@@ -578,7 +580,7 @@ def log_close_if_flat(t, st):
         at.setdefault("entry_ts", at.get("ts"))
         _q_now = _live_qty[sym]
         _q0 = float(at.get("qty") or 0)
-        if _q0 <= 0 or _q_now >= _q0 * 0.999:
+        if _q0 <= 0 or _q_now >= _q0 * QTY_COVER_TOL:
             continue
         raw = str(sym).split(":")[0].replace("/", "")
         try:
@@ -860,7 +862,7 @@ def manage_open_positions(t):
             _lk = trail_lock_pct(side, entry, abs(pnl_pct) * 100, _atr_pct) if (_atr_pct and _in_profit) else None
             if _lk is not None:
                 _lv = entry + r_dist * _lk if side == "LONG" else entry - r_dist * _lk
-                _lv = round(_lv, dec) if _lk else round(entry * (1.001 if side == "LONG" else 0.999), dec)
+                _lv = round(_lv, dec) if _lk else round(entry * (1.001 if side == "LONG" else QTY_COVER_TOL), dec)
                 if lock_sl is None:
                     lock_sl = _lv
                 else:
@@ -1393,24 +1395,24 @@ def scan_and_enter(t):
                     log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - RSI overextended ({_rsi:.1f} >= 58.0) DILARANG BELI DI PUCUK")
                     continue
                 # 2. Bollinger Band ceiling: wajib minimal 1.5% di bawah BB_UP (dilarang mepet upper band)
-                if _bbu and price >= float(_bbu) * 0.985:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Price too close to Upper Bollinger Band (${price} >= {float(_bbu)*0.985:.4f}) DILARANG BELI DI PUCUK")
+                if _bbu and price >= float(_bbu) * (1.0 - BB_CLEAR_TOL):
+                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Price too close to Upper Bollinger Band (${price} >= {float(_bbu)*(1.0 - BB_CLEAR_TOL):.4f}) DILARANG BELI DI PUCUK")
                     continue
-                # 3. Bar close juga tidak boleh di atas BB_UP * 0.985
+                # 3. Bar close juga tidak boleh di atas BB_UP * (1.0 - BB_CLEAR_TOL)
                 _bar_close = float(meta.get("close", 0.0))
-                if _bbu and _bar_close >= float(_bbu) * 0.985:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Bar close too high near Upper Bollinger Band (${_bar_close} >= {float(_bbu)*0.985:.4f}) DILARANG BELI DI PUCUK")
+                if _bbu and _bar_close >= float(_bbu) * (1.0 - BB_CLEAR_TOL):
+                    log(f"ORCHESTRATOR HARD VETO: {sym} LONG rejected - Bar close too high near Upper Bollinger Band (${_bar_close} >= {float(_bbu)*(1.0 - BB_CLEAR_TOL):.4f}) DILARANG BELI DI PUCUK")
                     continue
             elif side_str == "SHORT":
                 if _rsi <= 42.0:
                     log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - RSI oversold ({_rsi:.1f} <= 42.0) DILARANG SELL DI DASAR")
                     continue
-                if _bbl and price <= float(_bbl) * 1.015:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Price too close to Lower Bollinger Band (${price} <= {float(_bbl)*1.015:.4f}) DILARANG SELL DI DASAR")
+                if _bbl and price <= float(_bbl) * (1.0 + BB_CLEAR_TOL):
+                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Price too close to Lower Bollinger Band (${price} <= {float(_bbl)*(1.0 + BB_CLEAR_TOL):.4f}) DILARANG SELL DI DASAR")
                     continue
                 _bar_close = float(meta.get("close", 0.0))
-                if _bbl and _bar_close <= float(_bbl) * 1.015:
-                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Bar close too low near Lower Bollinger Band (${_bar_close} <= {float(_bbl)*1.015:.4f}) DILARANG SELL DI DASAR")
+                if _bbl and _bar_close <= float(_bbl) * (1.0 + BB_CLEAR_TOL):
+                    log(f"ORCHESTRATOR HARD VETO: {sym} SHORT rejected - Bar close too low near Lower Bollinger Band (${_bar_close} <= {float(_bbl)*(1.0 + BB_CLEAR_TOL):.4f}) DILARANG SELL DI DASAR")
                     continue
 
             snap = {

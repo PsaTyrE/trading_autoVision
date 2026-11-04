@@ -203,6 +203,8 @@ check("re-arm: batas percobaan 3", A.REARM_MAX_TRIES == 3)
 check("re-arm: toleransi duplikat 2e-4", abs(A.TP_DUP_TOL - 2e-4) < 1e-15)
 check("news: jendela judul 180 menit", A.NEWS_TAG_TITLE_WINDOW_MIN == 180)
 check("breaker: 10% equity", abs(A.BREAKER_EQUITY_PCT - 0.10) < 1e-12)
+check("anti-pucuk: toleransi BB 1,5%", abs(A.BB_CLEAR_TOL - 0.015) < 1e-12)
+check("stop: ambang cakupan qty 99,9%", abs(A.QTY_COVER_TOL - 0.999) < 1e-12)
 
 # runner harus benar-benar disisakan: 1005 unit JCT -> 4 leg, total < qty
 _tm_r = {"entry": 0.004979, "sl": 0.005892}
