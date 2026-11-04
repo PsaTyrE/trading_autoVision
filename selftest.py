@@ -169,6 +169,13 @@ check("state selftest bukan state live",
       os.path.abspath(A.STATE_FILE) != os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                                     "autonomous_trader_state.json")))
 
+# --- 20. Kandidat #1: filter lebar SL > 5% ---
+check("sl_width_pct hitung benar", abs(A.sl_width_pct(100.0, 5.0) - 5.0) < 1e-9)
+check("SL 5,0% masih lolos (batas inklusif)", A.sl_width_ok(100.0, 5.0) is True)
+check("SL 5,01% ditolak", A.sl_width_ok(100.0, 5.01) is False)
+check("data tidak valid -> fail-open (entry tidak diblokir)", A.sl_width_ok(0, 5.0) is True)
+check("ambang 5,0% persis (bukan hasil optimasi)", abs(A.MAX_SL_PCT - 5.0) < 1e-9)
+
 # --- 19. re-arm TP: yang dipulihkan adalah leg NYATA, bukan level strategi ---
 _tm_new = {"entry": 0.004979, "sl": 0.005892,
            "tp_legs": [[1.0, 262.0, 0.004066], [1.2, 241.0, 0.003883]]}
@@ -193,5 +200,5 @@ if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 51, 17 + 51))
+    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 56, 17 + 56))
     sys.exit(0)

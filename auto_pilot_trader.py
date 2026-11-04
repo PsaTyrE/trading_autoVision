@@ -76,6 +76,10 @@ RISK_TIERS = [
     (600.0, 0.035),   # $600+   -> 3.5%
 ]
 RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
+# Kandidat #1 (FREEZE.md): tolak entry kalau lebar SL > 5% dari harga.
+# Dievaluasi di checkpoint 29 close: SL>5% n=10 -> -1,32R | SL<=5% n=19 -> +6,67R.
+# 0 = filter mati.
+MAX_SL_PCT = float(os.getenv("MAX_SL_PCT", "5.0"))
 
 
 _POSMETA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pos_meta.json")
@@ -1045,6 +1049,33 @@ def maker_entry(t, sym, side, qty, ref_price, atr):
         log(f"Maker entry error {sym}: {e}")
         return None
 
+def sl_width_pct(price, sl_dist):
+    """Lebar SL dalam persen harga. None kalau data tidak valid."""
+    try:
+        price = float(price)
+        sl_dist = abs(float(sl_dist))
+    except Exception:
+        return None
+    if price <= 0 or sl_dist <= 0:
+        return None
+    return sl_dist / price * 100.0
+
+
+def sl_width_ok(price, sl_dist):
+    """False = entry ditolak karena SL kelewat lebar (Kandidat #1).
+
+    Fail-open: kalau lebar SL tidak bisa dihitung, entry TIDAK diblokir.
+    Filter ini cuma menolak SL yang jelas kelebaran, bukan jadi sumber
+    entry gagal gara-gara bug hitung.
+    """
+    if MAX_SL_PCT <= 0:
+        return True
+    p = sl_width_pct(price, sl_dist)
+    if p is None:
+        return True
+    return p <= MAX_SL_PCT
+
+
 def scan_and_enter(t):
     """COMPRESSION BREAKOUT v2 - Multi-position with Correlation Guard."""
     # --- NEWS GUARD ---
@@ -1400,6 +1431,13 @@ def scan_and_enter(t):
 
         except Exception as ae:
             log(f"VETO: AI unavailable ({ae}) - skip {sym}")
+            continue
+
+        # --- FILTER LEBAR SL (Kandidat #1 FREEZE.md) ---
+        _sl_d = strategy.SL_ATR * meta["atr"]
+        if not sl_width_ok(price, _sl_d):
+            log(f"SL WIDTH REJECT {sym}: SL {sl_width_pct(price, _sl_d):.2f}% > {MAX_SL_PCT:g}% "
+                f"(jarak {_sl_d:.6g} @ {price}) - checkpoint 29: SL>5% n=10 -1,32R")
             continue
 
         # --- EXECUTE MAKER ENTRY ---

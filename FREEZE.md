@@ -174,3 +174,26 @@ heads-up kalau ada posisi terbuka dekat berita merah.
   terpasang (bisa sudah trailing), bukan SL awal → R-nya taksiran. Jangan dihitung sebagai
   sampel checkpoint 20 trade tanpa catatan.
 - Selftest: **68 check** (3 check baru untuk `_tp_legs_for`).
+
+## Kandidat #1 DITERAPKAN — 2026-11-05 (checkpoint 29 close)
+
+**Aturan:** entry ditolak kalau lebar SL > **5,0%** dari harga (`MAX_SL_PCT=5.0`, `0` = filter mati).
+Pre-registrasi: lihat Kandidat #1 di atas, ditulis **sebelum** hasilnya diketahui.
+
+**Bukti (29 close penuh, semua live, bukan backtest):**
+
+| Kelompok | n | Total R | Expectancy |
+|---|---|---|---|
+| SL <= 5% | 19 | +6,67R | +0,35R |
+| SL > 5%  | 10 | -1,32R | -0,13R |
+
+**Catatan jujur:** dari 10 trade yang akan ditolak, **4 justru profit**
+(INJ +0,23 / GTC +0,52 / UNI +0,44 / +1 lainnya) total **+2,06R**; 6 sisanya **-3,38R**.
+Jadi filternya bukan "buang semua yang jelek" — agregatnya yang rugi.
+
+**Ambang tidak dioptimasi.** Kalau ambang digeser ke 6%, hasilnya kelihatan lebih bagus
+(n=6, -1,49R), tapi itu curve-fitting pada 29 sampel dan sengaja **tidak** dilakukan.
+5,0% dipakai persis seperti yang ditulis di pre-registrasi.
+
+**Efek samping yang diterima:** frekuensi entry turun ~1/3 (10 dari 29 trade historis akan
+ditolak). Kuota harian 3/hari dan slot 3 tidak berubah.
