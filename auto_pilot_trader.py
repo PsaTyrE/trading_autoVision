@@ -81,6 +81,19 @@ RISK_PCT_CAP = float(os.getenv("RISK_PCT_CAP", "0.035"))
 # 0 = filter mati.
 MAX_SL_PCT = float(os.getenv("MAX_SL_PCT", "5.0"))
 
+# --- Ladder TP: SATU sumber kebenaran ---------------------------------------
+# Dulu entry ladder dan re-arm (_tp_legs_for) masing-masing punya salinan angka
+# sendiri. Kalau satu diubah, re-arm memulihkan leg di level yang berbeda dari
+# yang benar-benar dipasang. Sekarang keduanya membaca konstanta ini.
+LADDER_LEVELS = [1.0, 1.2, 1.4, 1.7]
+LADDER_WEIGHTS = [0.26, 0.24, 0.22, 0.18]
+LADDER_RUNNER_PCT = 0.10          # porsi qty yang tidak dipasangi TP
+REARM_MAX_TRIES = 3               # batas percobaan re-arm per posisi
+TP_DUP_TOL = 2e-4                 # toleransi harga saat cek "order TP ini sudah ada?"
+NEWS_TAG_TITLE_WINDOW_MIN = 180   # judul berita cuma ditempel kalau |menit| <= ini
+BREAKER_EQUITY_PCT = 0.10         # circuit breaker minimal = 10% equity
+
+
 
 _POSMETA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pos_meta.json")
 
@@ -469,6 +482,10 @@ def _news_tag(ts_ms, window_min=45):
             best_d, best_t = d, str(e.get("title") or "")
     if best_d is None:
         return 0, "", 0.0
+    # Judul hanya ditempel kalau close-nya benar-benar dekat event. Tanpa batas ini,
+    # event yang sudah lewat 8 jam tetap jadi "berita terdekat" dan kolomnya menyesatkan.
+    if abs(best_d) > NEWS_TAG_TITLE_WINDOW_MIN:
+        best_t = ""
     return (1 if abs(best_d) <= window_min else 0), best_t, round(best_d, 1)
 
 
@@ -521,11 +538,11 @@ def _tp_legs_for(tm, side, qty, cur_price=None):
     if _en > 0 and _sl > 0 and abs(_en - _sl) > 0:
         _r = abs(_en - _sl)
         _sg = 1.0 if str(side).upper() == "LONG" else -1.0
-        _lv = [1.0, 1.2, 1.4, 1.7]
-        _w = [0.26, 0.24, 0.22, 0.18]
+        _lv = list(LADDER_LEVELS)
+        _w = list(LADDER_WEIGHTS)
         _sw = sum(_w)
         for _m, _ww in zip(_lv, _w):
-            out.append((max(0.0, float(qty) * (_ww / _sw) * 0.9), _en + _sg * _r * _m))
+            out.append((max(0.0, float(qty) * (_ww / _sw) * (1.0 - LADDER_RUNNER_PCT)), _en + _sg * _r * _m))
         return out
     if tm.get("tp1") and tm.get("tp2"):
         return [(float(qty) * 0.60, float(tm["tp1"])), (float(qty) * 0.25, float(tm["tp2"]))]
@@ -871,8 +888,10 @@ def manage_open_positions(t):
                 trade_meta["sl_live"] = float(cur_sl)
                 at_dict[symbol] = trade_meta
                 st["active_trades"] = at_dict
-        except Exception:
-            pass
+        except Exception as _sle:
+            # Dulu `pass`: kalau ini gagal, sl_live basi dan pengukuran R/slip salah
+            # tanpa satu baris pun di log.
+            log(f"SL LIVE SAVE FAILED {symbol}: {err_detail(_sle)}")
 
         log(f"HB {symbol} {side} qty {qty} px {cur_price} pnl {pnl_pct*100:+.2f}% gainR {gain/r_dist if r_dist else 0:.2f} sl {cur_sl or 0}")
 
@@ -894,6 +913,34 @@ def manage_open_positions(t):
                     _have_q += float(o.get("amount") or 0)
                 except Exception:
                     continue
+            # BUG FIX: posisi yang dibuka sebelum tp_legs ada di state tidak punya
+            # catatan leg sama sekali. Kalau order TP-nya hilang semua, re-arm membangun
+            # ulang ladder dari entry/SL dan bisa memasang LAGI level yang sudah kena TP
+            # (Q: 1,2R sudah fill 50%). Jadi catat dulu leg yang masih hidup; re-arm
+            # sesudah ini selalu punya sumber kebenaran dari exchange.
+            if not (trade_meta.get("tp_legs") or []) and _open_close:
+                try:
+                    _ent = float(trade_meta.get("entry") or 0.0)
+                    _slm = float(trade_meta.get("sl") or 0.0)
+                    _rd = abs(_ent - _slm)
+                    _bf = []
+                    for _o in _open_close:
+                        _op = float(_o.get("price") or 0.0)
+                        _oq = float(_o.get("amount") or 0.0)
+                        if _op <= 0 or _oq <= 0:
+                            continue
+                        _mm = (abs(_op - _ent) / _rd) if _rd > 0 else 0.0
+                        _bf.append([round(_mm, 2), _oq, _op])
+                    if _bf:
+                        _bf.sort(key=lambda x: x[0])
+                        trade_meta["tp_legs"] = _bf
+                        at_dict[symbol] = trade_meta
+                        st["active_trades"] = at_dict
+                        log("TP LEGS BACKFILL %s: %s" % (
+                            symbol, " | ".join("%s@%s(%sR)" % (q, p, m) for m, q, p in _bf)))
+                except Exception as _be:
+                    log(f"TP LEGS BACKFILL FAILED {symbol}: {err_detail(_be)}")
+
             # Kandidat re-arm:
             #  (a) leg yang GAGAL dipasang saat entry -> dijamin belum pernah terisi
             #  (b) tidak ada order TP sama sekali -> bangun ulang seluruh ladder
@@ -902,7 +949,7 @@ def manage_open_positions(t):
             _cand = [(float(_l[1]), float(_l[2]), _i) for _i, _l in enumerate(_fail_legs)]
             if not _cand and not _open_close:
                 _cand = [(float(_q), float(_p), None) for _q, _p in _tp_legs_for(trade_meta, side, qty)]
-            if _cand and _rf < 3:
+            if _cand and _rf < REARM_MAX_TRIES:
                 try:
                     _missed = set(trade_meta.get("missed") or [])
                     _rem = float(qty) - _have_q
@@ -910,7 +957,7 @@ def manage_open_positions(t):
                     for _lq, _tpp, _idx in _cand:
                         _dup = False
                         for _hp in _have_px:
-                            if _hp > 0 and abs(_tpp - _hp) <= max(abs(_tpp) * 2e-4, 1e-12):
+                            if _hp > 0 and abs(_tpp - _hp) <= max(abs(_tpp) * TP_DUP_TOL, 1e-12):
                                 _dup = True
                                 break
                         if _dup:
@@ -1109,7 +1156,7 @@ def scan_and_enter(t):
                 _f.write(f"{equity:.6f}")
         with open(bp) as _f:
             base = float(_f.read().strip())
-        breaker_threshold = max(float(os.getenv("CIRCUIT_BREAKER_MAX_LOSS", "5.00")), round(equity * 0.10, 2))
+        breaker_threshold = max(float(os.getenv("CIRCUIT_BREAKER_MAX_LOSS", "5.00")), round(equity * BREAKER_EQUITY_PCT, 2))
         if equity < base - breaker_threshold:
             log(f"CIRCUIT BREAKER: equity ${equity:.2f} < ${base:.2f}-{breaker_threshold:.2f}. Entries halted.")
             return
@@ -1145,7 +1192,7 @@ def scan_and_enter(t):
     _today = time.strftime("%Y-%m-%d", time.gmtime())
     _prev = int(st.get("day_entries") or 0) if st.get("day_key") == _today else 0
     if _prev >= DAILY_MAX:
-        log(f"Daily cap reached ({_prev}/{DAILY_MAX} UTC today). Waiting.")
+        log(f"Daily cap reached ({_prev}/{DAILY_MAX} untuk hari UTC {_today}; reset 00:00 UTC = 07:00 WIB). Waiting.")
         return
 
     # --- SCAN CLOSED 4h BARS ---
@@ -1515,10 +1562,10 @@ def scan_and_enter(t):
                 _tried = 0
                 _runner_units = _units
                 if _units >= 2 and _r > 0:
-                    _runner_units = 1 if _units <= 4 else max(1, int(round(_units * 0.10)))
+                    _runner_units = 1 if _units <= 4 else max(1, int(round(_units * LADDER_RUNNER_PCT)))
                     _tp_units = _units - _runner_units
-                    _lvls = [1.0, 1.2, 1.4, 1.7][:max(1, min(4, _tp_units))]
-                    _w = [0.26, 0.24, 0.22, 0.18][:len(_lvls)]
+                    _lvls = list(LADDER_LEVELS)[:max(1, min(4, _tp_units))]
+                    _w = list(LADDER_WEIGHTS)[:len(_lvls)]
                     _sw = sum(_w)
                     _w = [x / _sw for x in _w]
                     _alloc = [max(1, int(round(_tp_units * x))) for x in _w]

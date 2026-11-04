@@ -1,16 +1,20 @@
 {
-  "day_key": "2026-11-01",
-  "day_entries": 0,
-  "last_signal_ts": 1234567890,
+  "day_key": "2026-11-04",
+  "day_entries": 3,
+  "last_signal_ts": 1793754000000,
   "closed_syms": [
     "APR/USDT:USDT",
     "BR/USDT:USDT",
     "BTW/USDT:USDT",
+    "DOOD/USDT:USDT",
     "ENA/USDT:USDT",
     "GTC/USDT:USDT",
     "INJ/USDT:USDT",
     "IOST/USDT:USDT",
+    "JCT/USDT:USDT",
     "UNI/USDT:USDT",
+    "WIF/USDT:USDT",
+    "WLD/USDT:USDT",
     "XRP/USDT:USDT",
     "ZEC/USDT:USDT"
   ],
@@ -26,13 +30,90 @@
       "cluster": "MISC",
       "ts": 1793416102,
       "risk": 1.7113,
-      "entry_ts": 1793354551
+      "entry_ts": 1793354551,
+      "sl_live": 0.03744
     }
   },
   "excursions": {
     "Q/USDT:USDT": {
-      "mfe_pct": 41.46,
+      "mfe_pct": 44.099,
       "mae_pct": -10.337
     }
+  },
+  "news_alerted": {
+    "Congressional Elections": 1793735168
+  },
+  "active_trade": null,
+  "last_entry_ts": 1793757639.1876805,
+  "recon_ids": {
+    "INJ/USDT:USDT": [
+      "816757713",
+      "816894205",
+      "818406393",
+      "818538740",
+      "818546738",
+      "818601657",
+      "818875162",
+      "819280570"
+    ],
+    "JCT/USDT:USDT": [
+      "139571451",
+      "139571454",
+      "140023274"
+    ],
+    "IOST/USDT:USDT": [
+      "356951327",
+      "357008416",
+      "357008417",
+      "357008418",
+      "357008419",
+      "357139614",
+      "357170878",
+      "357170879"
+    ],
+    "DOOD/USDT:USDT": [
+      "97184487",
+      "97309916"
+    ],
+    "GTC/USDT:USDT": [
+      "272152804",
+      "272187682",
+      "272206097",
+      "272223084",
+      "274319126",
+      "274478510",
+      "274538685",
+      "274538686",
+      "274579720"
+    ],
+    "UNI/USDT:USDT": [
+      "938474281",
+      "938559281",
+      "938639497",
+      "943404446",
+      "943735618"
+    ],
+    "WLD/USDT:USDT": [
+      "1405638301",
+      "1405731815"
+    ],
+    "WIF/USDT:USDT": [
+      "1259414532",
+      "1259418204",
+      "1259421967",
+      "1259428084",
+      "1259435356",
+      "1259435357"
+    ]
+  },
+  "recon_funding": {
+    "INJ/USDT:USDT": -0.00235552,
+    "JCT/USDT:USDT": -0.00048389,
+    "IOST/USDT:USDT": 0.02676437,
+    "DOOD/USDT:USDT": 0.0005501,
+    "GTC/USDT:USDT": 0.07111912,
+    "UNI/USDT:USDT": 0.00218977,
+    "WLD/USDT:USDT": 0.0,
+    "WIF/USDT:USDT": -0.00102672
   }
 }

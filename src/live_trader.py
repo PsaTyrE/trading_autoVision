@@ -1040,6 +1040,29 @@ class BinanceFuturesTrader:
         except Exception:
             return False
 
+    # --- STOP PARAM: workingType=MARK_PRICE + priceProtect ----------------------
+    # STOP_MARKET default-nya CONTRACT_PRICE tanpa proteksi, jadi wick di last price
+    # bisa menembak stop dan fill jauh di belakang SL. Bukti terukur (slippage.csv,
+    # 11 SL exit): total slip merugikan +$1,31, terburuk GTC +3,94% (+$1,91) padahal
+    # risk-nya cuma $0,68 -> satu trade rugi 2,8x dari risiko yang diizinkan.
+    # Kalau venue menolak parameter ini (mis. -1106), flag dimatikan SEKALI lalu stop
+    # dipasang dengan cara lama: posisi tidak pernah dibiarkan telanjang.
+    STOP_WORKING_TYPE = os.getenv("STOP_WORKING_TYPE", "MARK_PRICE")
+    STOP_PRICE_PROTECT = os.getenv("STOP_PRICE_PROTECT", "true").strip().lower() in ("1", "true", "yes", "on")
+    _stop_extra_ok = True
+
+    def _stop_params(self, stop_price, reduce_only=True):
+        p = {"stopPrice": stop_price, "reduceOnly": reduce_only}
+        if type(self)._stop_extra_ok:
+            p["workingType"] = type(self).STOP_WORKING_TYPE
+            p["priceProtect"] = type(self).STOP_PRICE_PROTECT
+        return p
+
+    @staticmethod
+    def _stop_param_rejected(err):
+        t = str(err).lower()
+        return any(k in t for k in ("-1106", "-1104", "parameter", "workingtype", "priceprotect", "price protect"))
+
     def set_protective_stop(self, symbol: str, stop_price: float, amount: Optional[float] = None, position_side: str = "LONG") -> bool:
         """Serialized wrapper around _place_protective_stop.
 
@@ -1179,12 +1202,15 @@ class BinanceFuturesTrader:
                         type="STOP_MARKET",
                         side=exit_side,
                         amount=amt,
-                        params={"stopPrice": sp, "reduceOnly": True}
+                        params=self._stop_params(sp)
                     )
                     if new_stop:
                         break
                 except Exception as oe:
                     last_err = oe
+                    if type(self)._stop_extra_ok and self._stop_param_rejected(oe):
+                        type(self)._stop_extra_ok = False
+                        print(f"[!] STOP PARAM FALLBACK: workingType/priceProtect ditolak venue -> pakai default ({oe})")
                     time.sleep(0.3)
             if not new_stop:
                 # Re-arm the just-cancelled stop so the position is never left naked.
@@ -1192,7 +1218,7 @@ class BinanceFuturesTrader:
                     try:
                         self._submit_order(
                             symbol=resolved_sym, type="STOP_MARKET", side=exit_side, amount=amt,
-                            params={"stopPrice": float(self.exchange.price_to_precision(resolved_sym, prev_sp)), "reduceOnly": True})
+                            params=self._stop_params(float(self.exchange.price_to_precision(resolved_sym, prev_sp))))
                     except Exception as e:
                         logger.debug(f"Re-arm stop failed: {e}")
                 self.last_error = f"Failed to place protective stop: {last_err}"
@@ -1231,7 +1257,7 @@ class BinanceFuturesTrader:
                 try:
                     self._submit_order(
                         symbol=resolved_sym, type="STOP_MARKET", side=exit_side,
-                        amount=amt, params={"stopPrice": sp, "reduceOnly": True})
+                        amount=amt, params=self._stop_params(sp))
                     print(f"[!] Protective stop was missing after de-dup — re-placed on {symbol} @ {sp}")
                 except Exception as re_e:
                     self.last_error = f"Stop vanished and re-place failed: {re_e}"

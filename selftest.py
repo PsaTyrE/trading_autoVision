@@ -18,9 +18,11 @@ import auto_pilot_trader as A
 import src.strategy as strategy
 
 failures = []
+passed = [0]
 
 def check(name, cond):
     if cond:
+        passed[0] += 1
         print(f"PASS {name}")
     else:
         print(f"FAIL {name}")
@@ -191,6 +193,41 @@ check("re-arm rekonstruksi 1,0/1,2/1,4/1,7R (bukan 2R level strategi)",
 check("re-arm tanpa info entry/SL -> tidak memasang apa pun",
       A._tp_legs_for({"entry": 0, "sl": 0}, "SHORT", 10) == [])
 
+# --- 21. hardcode cleanup: konstanta tunggal + stop param --------------------
+check("ladder: levels satu sumber kebenaran", A.LADDER_LEVELS == [1.0, 1.2, 1.4, 1.7])
+check("ladder: bobot 0,26/0,24/0,22/0,18 (jumlah 0,90)",
+      abs(sum(A.LADDER_WEIGHTS) - 0.90) < 1e-9
+      and all(b < a for a, b in zip(A.LADDER_WEIGHTS, A.LADDER_WEIGHTS[1:])))
+check("ladder: runner 10%", abs(A.LADDER_RUNNER_PCT - 0.10) < 1e-12)
+check("re-arm: batas percobaan 3", A.REARM_MAX_TRIES == 3)
+check("re-arm: toleransi duplikat 2e-4", abs(A.TP_DUP_TOL - 2e-4) < 1e-15)
+check("news: jendela judul 180 menit", A.NEWS_TAG_TITLE_WINDOW_MIN == 180)
+check("breaker: 10% equity", abs(A.BREAKER_EQUITY_PCT - 0.10) < 1e-12)
+
+# runner harus benar-benar disisakan: 1005 unit JCT -> 4 leg, total < qty
+_tm_r = {"entry": 0.004979, "sl": 0.005892}
+_legs_r = A._tp_legs_for(_tm_r, "SHORT", 1005)
+_tot_r = sum(_q for _q, _p in _legs_r)
+check("re-arm: runner tetap disisakan (<=92% qty)", len(_legs_r) == 4 and _tot_r <= 1005 * 0.92)
+
+import src.live_trader as LT
+
+_p_on = LT.BinanceFuturesTrader._stop_params(
+    LT.BinanceFuturesTrader.__new__(LT.BinanceFuturesTrader), 123.45)
+check("stop: pakai workingType MARK_PRICE", str(_p_on.get("workingType")) == "MARK_PRICE")
+check("stop: priceProtect aktif", _p_on.get("priceProtect") is True)
+check("stop: stopPrice tetap dibawa", abs(float(_p_on.get("stopPrice")) - 123.45) < 1e-9)
+
+LT.BinanceFuturesTrader._stop_extra_ok = False
+_p_off = LT.BinanceFuturesTrader._stop_params(
+    LT.BinanceFuturesTrader.__new__(LT.BinanceFuturesTrader), 123.45)
+LT.BinanceFuturesTrader._stop_extra_ok = True
+check("stop: fallback tanpa param kalau venue menolak",
+      "workingType" not in _p_off and "priceProtect" not in _p_off and "stopPrice" in _p_off)
+check("stop: deteksi penolakan parameter",
+      LT.BinanceFuturesTrader._stop_param_rejected(Exception("binance -1106 Parameter 'priceProtect' invalid"))
+      and not LT.BinanceFuturesTrader._stop_param_rejected(Exception("-2021 Order would immediately trigger")))
+
 try:
     os.remove(A.STATE_FILE)
 except Exception:
@@ -200,5 +237,5 @@ if failures:
     print(f"\nRESULT: {len(failures)} FAILED: {failures}")
     sys.exit(1)
 else:
-    print("\nRESULT: ALL PASS (%d/%d)" % (17 + 56, 17 + 56))
+    print("\nRESULT: ALL PASS (%d/%d)" % (passed[0], passed[0]))
     sys.exit(0)
