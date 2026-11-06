@@ -46,3 +46,4 @@ muse_consult.py
 auto_pilot_trader_v11.py
 stop_watchdog.service
 tg_notify.py
+.recon_ids.json

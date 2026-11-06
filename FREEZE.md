@@ -197,3 +197,37 @@ Jadi filternya bukan "buang semua yang jelek" — agregatnya yang rugi.
 
 **Efek samping yang diterima:** frekuensi entry turun ~1/3 (10 dari 29 trade historis akan
 ditolak). Kuota harian 3/hari dan slot 3 tidak berubah.
+
+## Perbaikan 2026-11-06 (bukan parameter strategi)
+
+- **BUG PnL dobel.** `recon_ids` tinggal di state; begitu state direset, close
+  berikutnya menjumlah ulang SEMUA fill sejak entry. Bukti Q: baris PARTIAL
+  +0,9383 (31 Okt) lalu close final +1,8970, padahal fill ketiga cuma +0,9590.
+  Kelebihan catat **+0,9383** (net 33 close 4,58 -> 3,64).
+- **FIX.** Id fill sekarang juga disimpan di sidecar `.recon_ids.json` yang tidak
+  disentuh `save_state()`; pembacaan `seen = state | sidecar`. Selftest 90/90.
+- **Data.** Baris Q di `trade_closed.csv` dikoreksi: gross 0,9590 / net 0,8421.
+- Angka acuan setelah koreksi: 33 close, net **+3,64**, **+5,82R**,
+  expectancy **+0,176R**, WR 55,9%, avg win +0,57R vs avg loss -0,32R.
+
+## Target +$100 — aturan tangga risiko (pre-registrasi, ditulis 2026-11-06)
+
+Target: net trading **+$100** (equity ~155,9) dari deposit 55,78.
+Hitungan saat pre-registrasi: expectancy +0,176R, ~1,5 close/hari, equity 56,87.
+Compounding (expectancy dianggap tetap, ini asumsi bukan janji):
+risk 2% ~180 hari | risk 3% ~120 hari | risk 5% ~72 hari.
+
+Risk 5% **ditolak**: breaker harian 5% berarti satu loss langsung menghentikan
+hari itu, jadi 5% tidak bisa dipakai bersama aturan breaker yang sekarang.
+
+Aturan yang dikunci SEBELUM hasil diketahui:
+
+1. Risk tetap **2%** sampai (a) net trading akun >= +$2,00 dan (b) minimal
+   **20 close baru** sejak 2026-11-06.
+2. Naik ke **3%** hanya kalau dari 20 close baru itu: expectancy >= **+0,15R**,
+   profit factor >= **1,5**, max drawdown < **15%**, dan tidak ada pelanggaran
+   aturan (entry lewat kuota, posisi tanpa stop, dsb).
+3. Gagal salah satu -> tetap 2%, hitung ulang 20 close berikutnya. Ambang tidak
+   digeser setelah hasil keluar.
+4. Plafon **3%** sampai equity 100. Di atas itu evaluasi ulang dengan data baru.
+5. Tambah modal bukan bagian rencana ini (keputusan user, bukan bot).

@@ -230,6 +230,38 @@ check("stop: deteksi penolakan parameter",
       LT.BinanceFuturesTrader._stop_param_rejected(Exception("binance -1106 Parameter 'priceProtect' invalid"))
       and not LT.BinanceFuturesTrader._stop_param_rejected(Exception("-2021 Order would immediately trigger")))
 
+# --- 22. dedupe fill pakai sidecar (state reset tidak boleh bikin hitung dobel) ---
+_side_old = A.RECON_SIDECAR
+A.RECON_SIDECAR = "/tmp/.selftest_recon_ids.json"
+try:
+    os.remove(A.RECON_SIDECAR)
+except Exception:
+    pass
+
+
+class _FakeTr:
+    class exchange:
+        @staticmethod
+        def fapiPrivateGetUserTrades(params):
+            return [
+                {"id": "1", "time": 1000, "realizedPnl": "0.9383", "commission": "0.0013"},
+                {"id": "2", "time": 2000, "realizedPnl": "0.9590", "commission": "0.0011"},
+            ]
+
+
+_st1 = {}
+A._mark_recon(_st1, "Q/USDT:USDT", ["1"])
+check("sidecar: id fill tersimpan di luar state",
+      "1" in (A._recon_ids_load().get("Q/USDT:USDT") or []))
+_p, _f, _ids, _t = A._recon_fills(_FakeTr, "QUSDT", {}, "Q/USDT:USDT")
+check("sidecar: state kosong tidak menghitung ulang fill lama",
+      _ids == ["2"] and abs(_p - 0.9590) < 1e-9)
+A.RECON_SIDECAR = _side_old
+try:
+    os.remove("/tmp/.selftest_recon_ids.json")
+except Exception:
+    pass
+
 try:
     os.remove(A.STATE_FILE)
 except Exception:

@@ -1,7 +1,7 @@
 {
-  "day_key": "2026-11-04",
-  "day_entries": 3,
-  "last_signal_ts": 1793754000000,
+  "day_key": "2026-11-06",
+  "day_entries": 1,
+  "last_signal_ts": 1793970000000,
   "closed_syms": [
     "APR/USDT:USDT",
     "BR/USDT:USDT",
@@ -12,51 +12,22 @@
     "INJ/USDT:USDT",
     "IOST/USDT:USDT",
     "JCT/USDT:USDT",
+    "Q/USDT:USDT",
+    "STRK/USDT:USDT",
     "UNI/USDT:USDT",
     "WIF/USDT:USDT",
     "WLD/USDT:USDT",
     "XRP/USDT:USDT",
     "ZEC/USDT:USDT"
   ],
-  "active_trades": {
-    "Q/USDT:USDT": {
-      "symbol": "Q/USDT:USDT",
-      "side": "SHORT",
-      "entry": 0.04508,
-      "qty": 56.0,
-      "sl": 0.06036,
-      "tp1": 0.0298,
-      "tp2": 0.01452,
-      "cluster": "MISC",
-      "ts": 1793416102,
-      "risk": 1.7113,
-      "entry_ts": 1793354551,
-      "sl_live": 0.03744,
-      "tp_legs": [
-        [
-          1.4,
-          25.0,
-          0.02369
-        ],
-        [
-          1.7,
-          20.0,
-          0.0191
-        ]
-      ]
-    }
-  },
-  "excursions": {
-    "Q/USDT:USDT": {
-      "mfe_pct": 44.099,
-      "mae_pct": -10.337
-    }
-  },
+  "active_trades": {},
+  "excursions": {},
   "news_alerted": {
-    "Congressional Elections": 1793735168
+    "Congressional Elections": 1793735168,
+    "Unemployment Claims": 1793901609
   },
   "active_trade": null,
-  "last_entry_ts": 1793757639.1876805,
+  "last_entry_ts": 1793973634.9663677,
   "recon_ids": {
     "INJ/USDT:USDT": [
       "816757713",
@@ -66,7 +37,9 @@
       "818546738",
       "818601657",
       "818875162",
-      "819280570"
+      "819280570",
+      "822008567",
+      "822125707"
     ],
     "JCT/USDT:USDT": [
       "139571451",
@@ -96,7 +69,9 @@
       "274478510",
       "274538685",
       "274538686",
-      "274579720"
+      "274579720",
+      "274722706",
+      "274770393"
     ],
     "UNI/USDT:USDT": [
       "938474281",
@@ -116,6 +91,32 @@
       "1259428084",
       "1259435356",
       "1259435357"
+    ],
+    "ZEC/USDT:USDT": [
+      "1745921525",
+      "1746145089",
+      "1746490281",
+      "1747165522",
+      "1752042012",
+      "1758302524",
+      "1781002605",
+      "1781369405",
+      "1781369406",
+      "1781369407",
+      "1781369408"
+    ],
+    "STRK/USDT:USDT": [
+      "301512386",
+      "301550822",
+      "301557752",
+      "301559535",
+      "301561946",
+      "301562964"
+    ],
+    "Q/USDT:USDT": [
+      "293186593",
+      "293392476",
+      "299544496"
     ]
   },
   "recon_funding": {
@@ -123,9 +124,12 @@
     "JCT/USDT:USDT": -0.00048389,
     "IOST/USDT:USDT": 0.02676437,
     "DOOD/USDT:USDT": 0.0005501,
-    "GTC/USDT:USDT": 0.07111912,
+    "GTC/USDT:USDT": 0.09719123,
     "UNI/USDT:USDT": 0.00218977,
     "WLD/USDT:USDT": 0.0,
-    "WIF/USDT:USDT": -0.00102672
+    "WIF/USDT:USDT": -0.00102672,
+    "ZEC/USDT:USDT": 0.00429066,
+    "STRK/USDT:USDT": 0.0,
+    "Q/USDT:USDT": 0.11577575
   }
 }

@@ -387,6 +387,36 @@ def get_open_positions(t):
     with contextlib.redirect_stdout(sys.stderr):
         return [p for p in t.exchange.fetch_positions() if float(p.get("contracts") or 0) != 0]
 
+RECON_SIDECAR = os.getenv("RECON_SIDECAR", os.path.join(BASE_DIR, ".recon_ids.json"))
+RECON_SIDECAR_MAX = 800
+
+
+def _recon_ids_load():
+    """Id fill yang sudah pernah dibukukan, dibaca dari sidecar.
+
+    Kenapa sidecar: recon_ids tinggal di state, dan state bisa hilang (reset,
+    selftest, restore backup). Begitu hilang, close berikutnya menjumlah ulang
+    SEMUA fill sejak entry - Q terbukti dobel: PARTIAL +0.9383 lalu close final
+    +1.8970 padahal fill ketiga cuma +0.9590. Sidecar tidak ikut save_state.
+    """
+    try:
+        with open(RECON_SIDECAR, "r") as f:
+            d = json.load(f) or {}
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _recon_ids_save(d):
+    try:
+        tmp = RECON_SIDECAR + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(d, f)
+        os.replace(tmp, RECON_SIDECAR)
+    except Exception as e:
+        log(f"RECON IDS SAVE FAILED: {e}")
+
+
 def _recon_fills(t, raw, st, sym):
     """Ambil fill yang BELUM pernah dicatat, berdasarkan trade id.
 
@@ -397,6 +427,7 @@ def _recon_fills(t, raw, st, sym):
     hitung seperti itu.
     """
     seen = set(st.get("recon_ids", {}).get(sym) or [])
+    seen |= set(_recon_ids_load().get(sym) or [])
     with contextlib.redirect_stdout(sys.stderr):
         tr = t.exchange.fapiPrivateGetUserTrades({"symbol": raw, "limit": 500})
     fresh = [x for x in tr if str(x.get("id")) not in seen]
@@ -446,6 +477,13 @@ def _mark_recon(st, sym, ids):
     cur.extend(ids)
     d[sym] = cur[-400:]
     st["recon_ids"] = d
+    side = _recon_ids_load()
+    s = list(side.get(sym) or [])
+    for i in ids:
+        if i not in s:
+            s.append(i)
+    side[sym] = s[-RECON_SIDECAR_MAX:]
+    _recon_ids_save(side)
 
 
 SLIP = os.getenv("SLIP_FILE", os.path.join(BASE_DIR, "slippage.csv"))
