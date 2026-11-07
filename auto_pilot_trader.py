@@ -52,6 +52,23 @@ WATCHLIST = [
     "BTW/USDT:USDT", "JCT/USDT:USDT", "Q/USDT:USDT", "APT/USDT:USDT", "WIF/USDT:USDT"
 ]
 
+# --- UNIVERSE: seluruh pasar USDT-M perpetual, bukan cuma 45 koin hardcode ---
+# SCAN_MODE=market -> tiap scan, daftar simbol dibangun dari fetch_tickers():
+#                     semua perpetual USDT likuid, di-pre-rank volume 24 jam.
+# SCAN_MODE=static -> pakai WATCHLIST di atas apa adanya (perilaku lama / rollback).
+# Parameter strategi (RSI/ADX/BB/SL/risk) TIDAK berubah oleh patch ini.
+SCAN_MODE = (os.getenv("SCAN_MODE", "market") or "market").strip().lower()
+SCAN_MIN_VOL_USDT = float(os.getenv("SCAN_MIN_VOL_USDT", "20000000"))
+SCAN_PRE_RANK = int(os.getenv("SCAN_PRE_RANK", "50"))
+# Stablecoin / fiat quote pair: bukan aset yang mau ditradingkan.
+SCAN_EXCLUDE_BASES = {
+    "USDC", "FDUSD", "TUSD", "BUSD", "DAI", "USDP", "USDD", "PYUSD", "EUR",
+    "EURI", "AEUR", "GBP", "TRY", "BRL", "ARS", "BIDR", "IDRT", "RUB", "UAH",
+    "NGN", "ZAR",
+}
+# Token leveraged (BTCUP, ETHDOWN, ...) bukan spot exposure.
+SCAN_LEV_SUFFIX = ("UP", "DOWN", "BULL", "BEAR", "3L", "3S", "5L", "5S")
+
 MAX_LEVERAGE = 5
 MAX_MARGIN_PCT = 0.85
 STATE_FILE = os.getenv("STATE_FILE", os.path.join(BASE_DIR, "autonomous_trader_state.json"))
@@ -321,6 +338,55 @@ def get_symbol_cluster(sym: str) -> str:
 
 def log(msg):
     print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
+
+_UNI_STATE = {"sig": None}
+
+def build_universe(t):
+    """Daftar simbol yang dipindai pada siklus ini.
+
+    market : seluruh perpetual USDT-M yang aktif, volume 24 jam >= SCAN_MIN_VOL_USDT,
+             tanpa stablecoin/fiat & token leveraged, di-pre-rank volume desc,
+             dipotong SCAN_PRE_RANK. Tujuannya: bot tidak terkunci di 45 koin
+             hardcode, dan koin tipis (biaya > edge) tersaring otomatis.
+    static : WATCHLIST lama, apa adanya.
+    Kalau API gagal, jatuh ke WATCHLIST supaya bot tidak berhenti trading.
+    """
+    if SCAN_MODE != "market":
+        return list(WATCHLIST), "static"
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            tickers = t.exchange.fetch_tickers()
+            markets = t.exchange.load_markets()
+    except Exception as e:
+        log(f"UNIVERSE: fetch_tickers gagal ({type(e).__name__}: {str(e)[:80]}) - fallback WATCHLIST")
+        return list(WATCHLIST), "fallback"
+    picks = []
+    for sym, tk in (tickers or {}).items():
+        try:
+            m = markets.get(sym) or {}
+            if not m or not m.get("active", True):
+                continue
+            if not (m.get("swap") and m.get("linear")):
+                continue
+            if (m.get("quote") or "").upper() != "USDT":
+                continue
+            base = (m.get("base") or "").upper()
+            if not base or base in SCAN_EXCLUDE_BASES:
+                continue
+            if base.endswith(SCAN_LEV_SUFFIX):
+                continue
+            vol = float(tk.get("quoteVolume") or 0.0)
+            if vol < SCAN_MIN_VOL_USDT:
+                continue
+            picks.append((sym, vol))
+        except Exception:
+            continue
+    if not picks:
+        log("UNIVERSE: nol simbol lolos filter likuiditas - fallback WATCHLIST")
+        return list(WATCHLIST), "fallback"
+    picks.sort(key=lambda x: -x[1])
+    return [p[0] for p in picks[:SCAN_PRE_RANK]], "market(%d likuid)" % len(picks)
+
 
 def load_state():
     try:
@@ -1259,8 +1325,14 @@ def scan_and_enter(t):
     # 4h = full size. 1h = 60% size, HANYA kalau tren 4h searah (biar nggak lawan arus).
     TF_PLAN = (("4h", 1.0), ("1h", 0.6))
 
+    _universe, _umode = build_universe(t)
+    _sig = (_umode, tuple(_universe))
+    if _sig != _UNI_STATE["sig"]:
+        log("UNIVERSE %s: scan %d simbol" % (_umode, len(_universe)))
+        _UNI_STATE["sig"] = _sig
+
     candidates = []
-    for sym in WATCHLIST:
+    for sym in _universe:
         if sym in occupied_symbols:
             continue
         try:

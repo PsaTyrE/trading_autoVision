@@ -262,6 +262,71 @@ try:
 except Exception:
     pass
 
+
+# --- UNIVERSE dinamis: seluruh pasar, bukan 45 koin hardcode ---
+class _FakeUniTr:
+    class exchange:
+        @staticmethod
+        def fetch_tickers():
+            return {
+                "BTC/USDT:USDT": {"quoteVolume": 5_000_000_000},
+                "ETH/USDT:USDT": {"quoteVolume": 2_000_000_000},
+                "DOOD/USDT:USDT": {"quoteVolume": 3_000_000},
+                "BTCUP/USDT:USDT": {"quoteVolume": 9_000_000_000},
+                "USDC/USDT:USDT": {"quoteVolume": 9_000_000_000},
+            }
+
+        @staticmethod
+        def load_markets():
+            def mk(base, quote="USDT", active=True):
+                return {"base": base, "quote": quote, "swap": True, "linear": True, "active": active}
+            return {
+                "BTC/USDT:USDT": mk("BTC"),
+                "ETH/USDT:USDT": mk("ETH"),
+                "DOOD/USDT:USDT": mk("DOOD"),
+                "BTCUP/USDT:USDT": mk("BTCUP"),
+                "USDC/USDT:USDT": mk("USDC"),
+            }
+
+
+class _FakeUniErr:
+    class exchange:
+        @staticmethod
+        def fetch_tickers():
+            raise RuntimeError("boom")
+
+        @staticmethod
+        def load_markets():
+            raise RuntimeError("boom")
+
+
+_mode_old = A.SCAN_MODE
+_vol_old = A.SCAN_MIN_VOL_USDT
+_rank_old = A.SCAN_PRE_RANK
+
+A.SCAN_MODE = "static"
+_u, _m = A.build_universe(_FakeUniTr)
+check("universe: mode static = WATCHLIST lama", _m == "static" and _u == A.WATCHLIST)
+
+A.SCAN_MODE = "market"
+A.SCAN_MIN_VOL_USDT = 20_000_000
+A.SCAN_PRE_RANK = 50
+_u, _m = A.build_universe(_FakeUniTr)
+check("universe: buang microcap + stablecoin + token leveraged",
+      sorted(_u) == ["BTC/USDT:USDT", "ETH/USDT:USDT"] and _m.startswith("market"))
+
+A.SCAN_PRE_RANK = 1
+_u, _m = A.build_universe(_FakeUniTr)
+check("universe: pre-rank likuiditas memotong ke N teratas", _u == ["BTC/USDT:USDT"])
+
+_u, _m = A.build_universe(_FakeUniErr)
+check("universe: API gagal -> fallback WATCHLIST (bot tidak berhenti)",
+      _m == "fallback" and _u == A.WATCHLIST)
+
+A.SCAN_MODE = _mode_old
+A.SCAN_MIN_VOL_USDT = _vol_old
+A.SCAN_PRE_RANK = _rank_old
+
 try:
     os.remove(A.STATE_FILE)
 except Exception:

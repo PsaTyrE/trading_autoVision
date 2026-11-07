@@ -231,3 +231,26 @@ Aturan yang dikunci SEBELUM hasil diketahui:
    digeser setelah hasil keluar.
 4. Plafon **3%** sampai equity 100. Di atas itu evaluasi ulang dengan data baru.
 5. Tambah modal bukan bagian rencana ini (keputusan user, bukan bot).
+
+## 2026-11-08 - Universe dinamis (bukan parameter strategi)
+
+Perubahan: `WATCHLIST` 45 koin hardcode TIDAK lagi jadi batas pemindaian.
+`SCAN_MODE=market` menyusun daftar simbol tiap siklus dari `fetch_tickers()`:
+semua perpetual USDT-M aktif, volume 24 jam >= $20 juta, tanpa stablecoin/fiat
+dan tanpa token leveraged (UP/DOWN/BULL/BEAR/3L/3S), di-pre-rank volume desc,
+dipotong `SCAN_PRE_RANK` = 50 simbol. Kalau API gagal -> fallback WATCHLIST.
+
+Yang TIDAK berubah: RSI 58/42, ADX 22, ambang BB, MAX_SL_PCT 5.0, ladder TP,
+risk 2%, MAX_OPEN_POSITIONS 3, MAX_DAILY_ENTRIES 3, seluruh aturan veto.
+Patch ini mengubah **populasi trade**, bukan parameter entry/exit.
+
+Alasan terukur: 20 dari 45 koin hardcode tidak lolos filter likuiditas $20 juta
+(termasuk DOOD, AGT, APR, BR, IOST, Q, JCT, BTW). Di koin tipis biaya melebihi
+edge: IOST realized +0,0486 tetapi net -0,0222 setelah komisi+funding. Ranking
+lama memakai volume surge sehingga sistematis memilih koin paling liar.
+
+Ukuran keberhasilan (diukur, bukan diklaim): 20 close pertama dengan universe
+baru dibanding baseline 33 close (net +$3,64, expectancy +0,176R, PF 2,42,
+WR 55,9%). Metrik: expectancy R, PF, rata-rata biaya per trade, max DD.
+Kalau expectancy tidak naik -> universe dikembalikan (`SCAN_MODE=static`) dan
+dilaporkan GAGAL. Ambang tidak digeser setelah hasil diketahui.
