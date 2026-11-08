@@ -86,6 +86,29 @@ def main():
     exp_r = sum_r / n_close if n_close else 0.0
     wr = 100.0 * wins / n_close if n_close else 0.0
 
+    # --- CHECKPOINT: validasi filter volume bar 4h (pre-register 2026-11-08) ---
+    # Hitung close yang terjadi SETELAH filter aktif, bandingkan dengan syarat FREEZE.md.
+    FILTER_SINCE = time.mktime(time.strptime("2026-11-08 07:24", "%Y-%m-%d %H:%M"))
+    f_n, f_w, f_r = 0, 0, 0.0
+    try:
+        for r in csv.DictReader(open("trade_closed.csv", encoding="utf-8")):
+            try:
+                R = float(r["R"])
+            except Exception:
+                continue
+            try:
+                ts = float(r.get("ts") or 0)
+            except Exception:
+                ts = 0.0
+            if ts > 1e11:
+                ts /= 1000.0
+            if ts and ts >= FILTER_SINCE:
+                f_n += 1
+                f_r += R
+                f_w += 1 if R > 0 else 0
+    except Exception:
+        pass
+
     # proyeksi struktural: expectancy x risk x frekuensi (bukan ekstrapolasi 14 hari)
     per_day = exp_r * RISK_PCT * TRADES_PER_DAY
     if per_day > 0 and equity > 0 and target_equity > equity:
@@ -165,6 +188,22 @@ def main():
         lines.append("Posisi terbuka: tidak ada (semua margin bebas)")
     lines.append("")
     lines.append("Track record: %d close | exp %+.3fR | WR %.0f%%" % (n_close, exp_r, wr))
+    if f_n == 0:
+        lines.append("Checkpoint filter vol4h: 0/20 close (baru aktif 08 Nov 07:24, belum ada yang close)")
+    else:
+        f_exp = f_r / f_n
+        f_wr = 100.0 * f_w / f_n
+        if f_n >= 20:
+            if f_wr >= 55 and f_exp >= 0.15:
+                verdict = "LULUS -> lanjut, kandidat naik risk 3%"
+            elif f_wr < 50 or f_exp <= 0:
+                verdict = "GAGAL -> rollback MIN_VOLR_4H=0"
+            else:
+                verdict = "NETRAL -> perpanjang 10 close"
+        else:
+            verdict = "belum dinilai (butuh %d close lagi)" % (20 - f_n)
+        lines.append("Checkpoint filter vol4h: %d/20 close | WR %.0f%% | exp %+.3fR | %s"
+                     % (f_n, f_wr, f_exp, verdict))
     msg = "\n".join(lines)
     print(msg)
 
