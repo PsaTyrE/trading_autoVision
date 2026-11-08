@@ -17,79 +17,11 @@
     "WIF/USDT:USDT",
     "WLD/USDT:USDT",
     "XRP/USDT:USDT",
-    "ZEC/USDT:USDT"
+    "ZEC/USDT:USDT",
+    "BNB/USDT:USDT",
+    "DOOD/USDT:USDT"
   ],
-  "active_trades": {
-    "BNB/USDT:USDT": {
-      "symbol": "BNB/USDT:USDT",
-      "side": "SHORT",
-      "entry": 696.37,
-      "qty": 0.05,
-      "sl": 717.11,
-      "tp1": 675.63,
-      "tp2": 654.89,
-      "tp_legs": [
-        [
-          1.0,
-          0.01,
-          675.63
-        ],
-        [
-          1.2,
-          0.01,
-          671.48
-        ],
-        [
-          1.4,
-          0.01,
-          667.33
-        ]
-      ],
-      "tp_failed": [],
-      "cluster": "L1_INFRA",
-      "ts": 1793980844,
-      "risk": 1.0371,
-      "sl_live": 717.11,
-      "entry_ts": 1793980844
-    },
-    "DOOD/USDT:USDT": {
-      "symbol": "DOOD/USDT:USDT",
-      "side": "SHORT",
-      "entry": 0.001738,
-      "qty": 14380.0,
-      "sl": 0.001785,
-      "tp1": 0.001691,
-      "tp2": 0.001643,
-      "tp_legs": [
-        [
-          1.0,
-          3739.0,
-          0.001691
-        ],
-        [
-          1.2,
-          3451.0,
-          0.001682
-        ],
-        [
-          1.4,
-          3164.0,
-          0.001672
-        ],
-        [
-          1.7,
-          2588.0,
-          0.001658
-        ]
-      ],
-      "tp_failed": [],
-      "cluster": "MISC",
-      "ts": 1794056722,
-      "risk": 0.68,
-      "sl_live": 0.001785,
-      "entry_ts": 1794056722
-    }
-  },
+  "active_trades": {},
   "excursions": {
     "BNB/USDT:USDT": {
       "mfe_pct": 0.513,
@@ -104,41 +36,6 @@
     "Congressional Elections": 1793735168,
     "Unemployment Claims": 1793901609,
     "Average Hourly Earnings m/m": 1793988009
-  },
-  "active_trade": {
-    "symbol": "DOOD/USDT:USDT",
-    "side": "SHORT",
-    "entry": 0.001738,
-    "qty": 14380.0,
-    "sl": 0.001785,
-    "tp1": 0.001691,
-    "tp2": 0.001643,
-    "tp_legs": [
-      [
-        1.0,
-        3739.0,
-        0.001691
-      ],
-      [
-        1.2,
-        3451.0,
-        0.001682
-      ],
-      [
-        1.4,
-        3164.0,
-        0.001672
-      ],
-      [
-        1.7,
-        2588.0,
-        0.001658
-      ]
-    ],
-    "tp_failed": [],
-    "cluster": "MISC",
-    "ts": 1794056722,
-    "risk": 0.68
   },
   "last_entry_ts": 1794056722.2604184,
   "recon_ids": {

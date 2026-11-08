@@ -1381,6 +1381,27 @@ def scan_and_enter(t):
 
                 meta["tf"] = _tf
                 meta["risk_mult"] = _mult
+
+                # --- KONFIRMASI VOLUME BAR 4h (pre-register 2026-11-08) ---
+                # Data 37 trade: volume bar 4h < 0,6x rata-rata 20 bar -> WR 31%, exp -0,10R.
+                # Rollback: set MIN_VOLR_4H=0 di .env. Tidak menyentuh RSI/ADX/BB/ladder/risk.
+                _vr4 = None
+                try:
+                    _d4v = _ctx.get("4h")
+                    if _d4v is not None and len(_d4v) >= 22:
+                        _v4 = float(_d4v.v.iloc[-2])
+                        _vm4 = float(_d4v.vma.iloc[-2])
+                        _vr4 = (_v4 / _vm4) if _vm4 > 0 else None
+                except Exception:
+                    _vr4 = None
+                meta["volr4h"] = _vr4
+                try:
+                    _min_vr4 = float(os.getenv("MIN_VOLR_4H", "0.6") or 0)
+                except Exception:
+                    _min_vr4 = 0.6
+                if _vr4 is not None and _min_vr4 > 0 and _vr4 < _min_vr4:
+                    log("VETO volr4h %s: volume bar 4h %.2fx < %.2fx (setup %s)" % (sym, _vr4, _min_vr4, _tf))
+                    continue
                 if st.get("last_signal_ts") == meta["bar_ts"]:
                     continue
                 if not _tradeable(sym, meta):

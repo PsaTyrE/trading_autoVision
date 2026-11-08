@@ -275,3 +275,36 @@ Karena itu bukan klaim "sudah lebih bagus" - dibuktikan atau dibatalkan pada
 
 Yang TIDAK berubah: RSI 58/42, ADX 22, ambang BB, MAX_SL_PCT 5.0, ladder TP,
 risk 2%, slot 3, kuota 3/hari, semua veto.
+
+## 2026-11-08 - Konfirmasi volume bar 4h (UJI, pre-register)
+
+**Yang berubah:** entry ditolak kalau volume bar 4h terakhir (bar close) < **0,6x** rata-rata volume 20 bar.
+Env: `MIN_VOLR_4H=0.6`. Rollback: `MIN_VOLR_4H=0`.
+
+**Yang TIDAK berubah:** RSI 42-64 / 36-58, ADX 22, ambang BB, `MAX_SL_PCT=5.0`, ladder TP,
+risk 2%, slot 3, kuota 3 entry/hari, semua veto (anti-pucuk, Sentiment, news guard).
+
+**Alasan terukur** (37 trade punya fitur entry lengkap, 29 Okt - 8 Nov, in-sample):
+
+| Volume bar 4h | n | Win rate | Expectancy |
+|---|---|---|---|
+| < 0,6x | 13 | 31% | -0,10R |
+| >= 0,6x | 24 | 62% | +0,23R |
+| < 1,0x | 18 | 39% | -0,06R |
+| >= 1,0x | 19 | 63% | +0,29R |
+
+Dibatasi ke koin yang masih lolos universe likuiditas baru: < 0,6x -> n=7, WR 29%, exp -0,08R;
+>= 0,6x -> n=13, WR 62%, exp +0,35R. Jadi efeknya bukan cuma efek koin tipis.
+
+Dua posisi yang ditutup 2026-11-08 (BNB 0,03x, DOOD 0,11x) ada di kelompok < 0,6x.
+
+**Kejujuran soal batas bukti:** n kecil, dan 20 kombinasi fitur diuji -> Fisher p = 0,09-0,19.
+Artinya ini kandidat, bukan bukti. Ambang 0,6 dipilih sebagai batas alami data (0,59 lalu 0,62)
+dan angka bulat, BUKAN optimum statistik (1,36) supaya tidak curve-fitting.
+
+**Metrik keberhasilan (dinilai setelah 20 close baru):**
+- Lulus: win rate >= 55% DAN expectancy >= +0,15R pada entry yang lolos filter.
+- Gagal: win rate < 50% atau expectancy negatif -> `MIN_VOLR_4H=0`, dicabut, dan ditulis di sini bahwa gagal.
+
+**Konsekuensi yang diterima:** frekuensi entry turun (13 dari 37 historis akan ditolak, ~35%),
+jadi profit lebih lambat per kalender, ditukar dengan kualitas entry.
