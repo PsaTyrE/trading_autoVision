@@ -204,6 +204,48 @@ def main():
             verdict = "belum dinilai (butuh %d close lagi)" % (20 - f_n)
         lines.append("Checkpoint filter vol4h: %d/20 close | WR %.0f%% | exp %+.3fR | %s"
                      % (f_n, f_wr, f_exp, verdict))
+    # --- FUNNEL hari ini: berapa kandidat muncul, ditolak di gerbang mana ---
+    _today = datetime.now().strftime("%Y-%m-%d")
+    _gate = {}
+    try:
+        for _ln in open("auto_pilot.log", encoding="utf-8", errors="ignore"):
+            if _today not in _ln or "VETO" not in _ln:
+                continue
+            _sym = ""
+            for _tok in _ln.split():
+                if "/USDT" in _tok:
+                    _sym = _tok.strip(":").split("/")[0]
+                    break
+            if not _sym:
+                continue
+            if "volr4h" in _ln:
+                _k = "vol4h"
+            elif "AI confidence" in _ln:
+                _k = "AI"
+            elif "PUCUK" in _ln or "jenuh" in _ln:
+                _k = "pucuk"
+            else:
+                _k = "lain"
+            _gate.setdefault(_k, set()).add(_sym)
+    except Exception:
+        pass
+    _n_today = 0
+    try:
+        for _r in csv.DictReader(open("trade_log.csv", encoding="utf-8")):
+            try:
+                _ts = float(_r["ts"])
+            except Exception:
+                continue
+            if _ts > 1e11:
+                _ts /= 1000.0
+            if datetime.fromtimestamp(_ts).strftime("%Y-%m-%d") == _today:
+                _n_today += 1
+    except Exception:
+        pass
+    if _gate or _n_today:
+        lines.append("Funnel hari ini: entry %d | ditolak vol4h %d koin, AI %d, anti-pucuk %d, lain %d"
+                     % (_n_today, len(_gate.get("vol4h", ())), len(_gate.get("AI", ())),
+                        len(_gate.get("pucuk", ())), len(_gate.get("lain", ()))))
     msg = "\n".join(lines)
     print(msg)
 
