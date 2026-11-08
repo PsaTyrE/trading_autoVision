@@ -136,8 +136,21 @@ def main():
             try:
                 entry = float(m.get("entry") or p.get("entryPrice") or 0)
                 sl = float(m.get("sl") or 0)
-                mark = float(p.get("markPrice") or 0)
                 side = (m.get("side") or p.get("side") or "").upper()
+                mark = float(p.get("markPrice") or 0)
+                if not mark or abs(mark - entry) < 1e-12:
+                    qty = float(p.get("contracts") or 0)
+                    upnl = float(p.get("unrealizedPnl") or 0)
+                    if qty and entry:
+                        mark = entry + (upnl / qty) * (1 if side == "LONG" else -1)
+                    try:
+                        with contextlib.redirect_stdout(sys.stderr):
+                            tk = ex.fetch_ticker(sym)
+                        _last = float(tk.get("last") or tk.get("close") or 0)
+                        if _last:
+                            mark = _last
+                    except Exception:
+                        pass
                 if entry and sl and sl != entry and mark:
                     risk = abs(entry - sl)
                     r = (mark - entry) / risk
