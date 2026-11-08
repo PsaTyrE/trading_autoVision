@@ -1094,6 +1094,17 @@ def manage_open_positions(t):
                         try:
                             _qq = float(t.exchange.amount_to_precision(symbol, min(_lq, _rem)))
                         except Exception as _qe:
+                            # FIX v10: leg terlalu kecil -> pasang satu TP penuh untuk sisa qty.
+                            _fq2 = 0.0
+                            try:
+                                _fq2 = float(t.exchange.amount_to_precision(symbol, _rem))
+                            except Exception:
+                                _fq2 = 0.0
+                            if _fq2 > 0:
+                                _plan.append((_fq2, _tpp, _idx))
+                                _rem = 0.0
+                                log(f"TP REARM SINGLE {symbol}: qty {_fq2} @ {_tpp} - leg terlalu kecil untuk dipecah")
+                                break
                             log(f"TP re-arm amount error {symbol}: {err_detail(_qe)}")
                             break
                         if _qq <= 0:
@@ -1737,6 +1748,24 @@ def scan_and_enter(t):
                         else:
                             _failed.append((_mult, _q, _p))
                             log(f"LADDER LEG FAILED {sym}: {_q}@{_p} ({_mult:g}R) - {getattr(t, 'last_error', '')}")
+
+                # FIX v10: qty terlalu kecil untuk dipecah -> satu TP penuh di level 1R.
+                # Tanpa ini ladder gagal total dan posisi hanya dijaga SL (bug ANTHROPIC 2026-11-08).
+                if not _placed and _r > 0:
+                    try:
+                        _fq = float(t.exchange.amount_to_precision(resolved, float(qty)))
+                    except Exception:
+                        _fq = 0.0
+                    if _fq > 0 and _fq >= _minq:
+                        _m1 = float(LADDER_LEVELS[0])
+                        _p1 = px(float(fill) + _sign * _r * _m1)
+                        _tried = max(1, _tried)
+                        if t.place_limit_order(sym, close_side, _fq, _p1, reduce_only=True):
+                            _placed.append((_m1, _fq, _p1))
+                            log(f"LADDER SINGLE {sym}: qty {_fq} @ {_p1} ({_m1:g}R) - qty {qty} tidak bisa dipecah, TP penuh")
+                        else:
+                            _failed.append((_m1, _fq, _p1))
+                            log(f"LADDER SINGLE FAILED {sym}: {_fq}@{_p1} - {getattr(t, 'last_error', '')}")
 
                 if _placed:
                     _txt = " | ".join(f"TP{i+1} {q}@{p} ({m:g}R)" for i, (m, q, p) in enumerate(_placed))

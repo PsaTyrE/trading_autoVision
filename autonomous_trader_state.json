@@ -1,11 +1,13 @@
 {
   "day_key": "2026-11-08",
-  "day_entries": 0,
-  "last_signal_ts": 1794052800000,
+  "day_entries": 1,
+  "last_signal_ts": 1794146400000,
   "closed_syms": [
     "APR/USDT:USDT",
+    "BNB/USDT:USDT",
     "BR/USDT:USDT",
     "BTW/USDT:USDT",
+    "DOOD/USDT:USDT",
     "ENA/USDT:USDT",
     "GTC/USDT:USDT",
     "INJ/USDT:USDT",
@@ -17,11 +19,25 @@
     "WIF/USDT:USDT",
     "WLD/USDT:USDT",
     "XRP/USDT:USDT",
-    "ZEC/USDT:USDT",
-    "BNB/USDT:USDT",
-    "DOOD/USDT:USDT"
+    "ZEC/USDT:USDT"
   ],
-  "active_trades": {},
+  "active_trades": {
+    "ANTHROPIC/USDT:USDT": {
+      "symbol": "ANTHROPIC/USDT:USDT",
+      "side": "SHORT",
+      "entry": 1399.16,
+      "qty": 0.02,
+      "sl": 1432.24,
+      "tp1": 1366.08,
+      "tp2": 1333.0,
+      "tp_legs": [],
+      "tp_failed": [],
+      "cluster": "MISC",
+      "ts": 1794150399,
+      "risk": 0.6616,
+      "sl_live": 1432.24
+    }
+  },
   "excursions": {
     "BNB/USDT:USDT": {
       "mfe_pct": 0.513,
@@ -30,6 +46,10 @@
     "DOOD/USDT:USDT": {
       "mfe_pct": 0.863,
       "mae_pct": -1.841
+    },
+    "ANTHROPIC/USDT:USDT": {
+      "mfe_pct": 0.825,
+      "mae_pct": -0.146
     }
   },
   "news_alerted": {
@@ -37,7 +57,7 @@
     "Unemployment Claims": 1793901609,
     "Average Hourly Earnings m/m": 1793988009
   },
-  "last_entry_ts": 1794056722.2604184,
+  "last_entry_ts": 1794150399.7566345,
   "recon_ids": {
     "INJ/USDT:USDT": [
       "816757713",
@@ -144,5 +164,19 @@
     "ZEC/USDT:USDT": 0.00429066,
     "STRK/USDT:USDT": 0.0,
     "Q/USDT:USDT": 0.11577575
+  },
+  "active_trade": {
+    "symbol": "ANTHROPIC/USDT:USDT",
+    "side": "SHORT",
+    "entry": 1399.16,
+    "qty": 0.02,
+    "sl": 1432.24,
+    "tp1": 1366.08,
+    "tp2": 1333.0,
+    "tp_legs": [],
+    "tp_failed": [],
+    "cluster": "MISC",
+    "ts": 1794150399,
+    "risk": 0.6616
   }
 }
