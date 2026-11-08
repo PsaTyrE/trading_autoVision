@@ -69,6 +69,14 @@ SCAN_EXCLUDE_BASES = {
 # Token leveraged (BTCUP, ETHDOWN, ...) bukan spot exposure.
 SCAN_LEV_SUFFIX = ("UP", "DOWN", "BULL", "BEAR", "3L", "3S", "5L", "5S")
 
+# --- RANKING KANDIDAT ---
+# Data 29 trade: surge 1,2-1,6x expectancy +0,288R; surge >=1,6x cuma +0,024R.
+# band = dahulukan surge yang dekat SCAN_VOL_BAND_CENTER (default 1,4x).
+# surge = perilaku lama (vol_ratio terbesar didahulukan) untuk rollback.
+SCAN_RANK_MODE = (os.getenv("SCAN_RANK_MODE", "band") or "band").strip().lower()
+SCAN_VOL_BAND_CENTER = float(os.getenv("SCAN_VOL_BAND_CENTER", "1.4"))
+
+
 MAX_LEVERAGE = 5
 MAX_MARGIN_PCT = 0.85
 STATE_FILE = os.getenv("STATE_FILE", os.path.join(BASE_DIR, "autonomous_trader_state.json"))
@@ -386,6 +394,13 @@ def build_universe(t):
         return list(WATCHLIST), "fallback"
     picks.sort(key=lambda x: -x[1])
     return [p[0] for p in picks[:SCAN_PRE_RANK]], "market(%d likuid)" % len(picks)
+
+def rank_candidates(candidates):
+    """Urutkan kandidat. band: |vol_ratio - center| terkecil dulu; surge: terbesar dulu."""
+    if SCAN_RANK_MODE == "surge":
+        return sorted(candidates, key=lambda x: x[3], reverse=True)
+    return sorted(candidates, key=lambda x: abs(x[3] - SCAN_VOL_BAND_CENTER))
+
 
 
 def load_state():
@@ -1381,8 +1396,8 @@ def scan_and_enter(t):
         log("No pullback signal on last closed 4h/1h bar.")
         return
 
-    # Rank candidates by volume surge
-    candidates.sort(key=lambda x: x[3], reverse=True)
+    # Rank candidates: pita volume surge (band) atau surge terbesar (surge)
+    candidates = rank_candidates(candidates)
 
     # Process candidates up to available slots with Correlation Guard
     entered_count = 0

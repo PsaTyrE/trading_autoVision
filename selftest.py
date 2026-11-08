@@ -327,6 +327,25 @@ A.SCAN_MODE = _mode_old
 A.SCAN_MIN_VOL_USDT = _vol_old
 A.SCAN_PRE_RANK = _rank_old
 
+
+# --- RANKING: pita volume surge, bukan surge terbesar ---
+_c1 = ("A/USDT:USDT", "BUY", {}, 1.30)
+_c2 = ("B/USDT:USDT", "BUY", {}, 2.50)
+_c3 = ("C/USDT:USDT", "BUY", {}, 1.45)
+
+_rk_old = A.SCAN_RANK_MODE
+A.SCAN_RANK_MODE = "band"
+_r = A.rank_candidates([_c2, _c1, _c3])
+check("rank band: surge 2,5x tidak didahulukan",
+      [c[0] for c in _r] == ["C/USDT:USDT", "A/USDT:USDT", "B/USDT:USDT"])
+
+A.SCAN_RANK_MODE = "surge"
+_r = A.rank_candidates([_c1, _c2, _c3])
+check("rank surge: perilaku lama tetap bisa dipanggil (rollback)",
+      [c[0] for c in _r] == ["B/USDT:USDT", "C/USDT:USDT", "A/USDT:USDT"])
+
+A.SCAN_RANK_MODE = _rk_old
+
 try:
     os.remove(A.STATE_FILE)
 except Exception:

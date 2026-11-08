@@ -254,3 +254,24 @@ baru dibanding baseline 33 close (net +$3,64, expectancy +0,176R, PF 2,42,
 WR 55,9%). Metrik: expectancy R, PF, rata-rata biaya per trade, max DD.
 Kalau expectancy tidak naik -> universe dikembalikan (`SCAN_MODE=static`) dan
 dilaporkan GAGAL. Ambang tidak digeser setelah hasil diketahui.
+
+## 2026-11-08 - Ranking kandidat: pita volume surge (bukan surge terbesar)
+
+Data 29 trade yang punya catatan entry + hasil (trade_log.csv x trade_excursion.csv):
+
+| surge | n | expectancy |
+|---|---:|---:|
+| < 1,2x | 10 | +0,160R |
+| 1,2-1,6x | 11 | +0,288R |
+| >= 1,6x | 8 | +0,024R |
+
+Selama ini `candidates.sort(vol_ratio, reverse=True)` mendahulukan surge TERBESAR,
+yaitu kelompok dengan expectancy paling buruk. Sekarang diurutkan berdasarkan
+kedekatan ke 1,4x (`SCAN_RANK_MODE=band`). Rollback: `SCAN_RANK_MODE=surge`.
+
+Catatan kejujuran: n kecil (8-11 per kelompok), ini in-sample, bisa jadi noise.
+Karena itu bukan klaim "sudah lebih bagus" - dibuktikan atau dibatalkan pada
+20 close berikutnya dengan metrik expectancy R, PF, dan jumlah trade.
+
+Yang TIDAK berubah: RSI 58/42, ADX 22, ambang BB, MAX_SL_PCT 5.0, ladder TP,
+risk 2%, slot 3, kuota 3/hari, semua veto.
