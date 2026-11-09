@@ -568,6 +568,7 @@ def _mark_recon(st, sym, ids):
 
 
 SLIP = os.getenv("SLIP_FILE", os.path.join(BASE_DIR, "slippage.csv"))
+MAKER_PROBE = os.getenv("MAKER_PROBE_FILE", os.path.join(BASE_DIR, "maker_probe.csv"))
 
 
 def _news_tag(ts_ms, window_min=45):
@@ -1825,6 +1826,28 @@ def scan_and_enter(t):
             log(f"Journal error: {je}")
 
         log(f"ENTRY {sym} {side_str} qty={qty} @ {fill} notional=${notional:.2f} SL={sl_price} TP1={tp1_price} TP2={tp2_price} risk=${risk_real:.2f} fee_rt=${fee_rt:.4f}")
+
+        # MAKER_PROBE: ukur spread + kedalaman top-of-book tiap entry. Dasar
+        # keputusan pindah ke limit/maker (fee sekarang 13% gross edge).
+        # Read-only: tidak mengubah order apa pun.
+        try:
+            _ob = t.exchange.fetch_order_book(resolved, limit=5)
+            _bb = float(_ob["bids"][0][0])
+            _ba = float(_ob["asks"][0][0])
+            _mid = (_bb + _ba) / 2.0
+            _spr = ((_ba - _bb) / _mid * 100.0) if _mid else 0.0
+            _dep = float(_ob["bids"][0][1]) * _bb + float(_ob["asks"][0][1]) * _ba
+            _newp = not os.path.exists(MAKER_PROBE)
+            with open(MAKER_PROBE, "a", newline="") as _pf:
+                _pw = csv.writer(_pf)
+                if _newp:
+                    _pw.writerow(["ts", "symbol", "side", "bid", "ask", "spread_pct",
+                                  "top_depth_usdt", "notional", "fee_rt"])
+                _pw.writerow([int(time.time()), sym, side_str, _bb, _ba,
+                              round(_spr, 5), round(_dep, 2), round(notional, 2), round(fee_rt, 4)])
+            log(f"MAKER PROBE {sym}: spread {_spr:.3f}% top depth ${_dep:.0f} vs fee taker ${fee_rt:.4f}")
+        except Exception as _mpe:
+            log(f"MAKER PROBE skip {sym}: {err_detail(_mpe)}")
 
         try:
             TelegramNotifier().notify_trade_opened(sym, {

@@ -15,6 +15,7 @@
     "INJ/USDT:USDT",
     "IOST/USDT:USDT",
     "JCT/USDT:USDT",
+    "MSTR/USDT:USDT",
     "Q/USDT:USDT",
     "STRK/USDT:USDT",
     "UNI/USDT:USDT",
@@ -45,27 +46,6 @@
       "risk": 0.6694,
       "sl_live": 51.77,
       "entry_ts": 1794215089
-    },
-    "MSTR/USDT:USDT": {
-      "symbol": "MSTR/USDT:USDT",
-      "side": "SHORT",
-      "entry": 124.95,
-      "qty": 0.19,
-      "sl": 128.4,
-      "tp1": 121.5,
-      "tp2": 118.04,
-      "tp_legs": [
-        [
-          1.0,
-          0.19,
-          121.5
-        ]
-      ],
-      "tp_failed": [],
-      "cluster": "MISC",
-      "ts": 1794233213,
-      "risk": 0.656,
-      "sl_live": 128.4
     }
   },
   "excursions": {
@@ -80,10 +60,6 @@
     "XAG/USDT:USDT": {
       "mfe_pct": 0.608,
       "mae_pct": -0.247
-    },
-    "MSTR/USDT:USDT": {
-      "mfe_pct": 0.176,
-      "mae_pct": -0.152
     }
   },
   "news_alerted": {
@@ -193,6 +169,10 @@
     "AAVE/USDT:USDT": [
       "1013897501",
       "1014027466"
+    ],
+    "MSTR/USDT:USDT": [
+      "84595989",
+      "84675600"
     ]
   },
   "recon_funding": {
@@ -208,26 +188,8 @@
     "STRK/USDT:USDT": 0.0,
     "Q/USDT:USDT": 0.11577575,
     "ANTHROPIC/USDT:USDT": -0.00139947,
-    "AAVE/USDT:USDT": -0.00089389
+    "AAVE/USDT:USDT": -0.00089389,
+    "MSTR/USDT:USDT": 0.0
   },
-  "active_trade": {
-    "symbol": "MSTR/USDT:USDT",
-    "side": "SHORT",
-    "entry": 124.95,
-    "qty": 0.19,
-    "sl": 128.4,
-    "tp1": 121.5,
-    "tp2": 118.04,
-    "tp_legs": [
-      [
-        1.0,
-        0.19,
-        121.5
-      ]
-    ],
-    "tp_failed": [],
-    "cluster": "MISC",
-    "ts": 1794233213,
-    "risk": 0.656
-  }
+  "active_trade": null
 }
