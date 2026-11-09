@@ -569,6 +569,7 @@ def _mark_recon(st, sym, ids):
 
 SLIP = os.getenv("SLIP_FILE", os.path.join(BASE_DIR, "slippage.csv"))
 MAKER_PROBE = os.getenv("MAKER_PROBE_FILE", os.path.join(BASE_DIR, "maker_probe.csv"))
+MAKER_SHADOW = os.getenv("MAKER_SHADOW_FILE", os.path.join(BASE_DIR, "maker_shadow.csv"))
 
 
 def _news_tag(ts_ms, window_min=45):
@@ -1905,6 +1906,63 @@ def news_heads_up(t):
         log(f"news_heads_up error: {e}")
 
 
+def maker_shadow(t):
+    """Uji bayangan: limit post-only di harga sentuh kena atau tidak.
+
+    Read-only, nol order. Sampel diambil per siklus (2 menit), jadi kalau harga
+    menyentuh lalu balik di antara siklus, dihitung tidak kena -> fill rate
+    cenderung UNDER-estimate. Kalau hasilnya tetap tinggi, maker layak dipakai.
+    """
+    try:
+        if not os.path.exists(MAKER_PROBE):
+            return
+        with open(MAKER_PROBE, newline="") as f:
+            rows = list(csv.DictReader(f))
+    except Exception:
+        return
+    if not rows:
+        return
+    done = set()
+    if os.path.exists(MAKER_SHADOW):
+        try:
+            with open(MAKER_SHADOW, newline="") as f:
+                done = {r["ts"] + r["symbol"] for r in csv.DictReader(f)}
+        except Exception:
+            pass
+    now = time.time()
+    fresh = not os.path.exists(MAKER_SHADOW)
+    out = []
+    for r in rows[-40:]:
+        if r["ts"] + r["symbol"] in done:
+            continue
+        try:
+            age = now - float(r["ts"])
+        except Exception:
+            continue
+        if age < 90:
+            continue
+        is_long = str(r["side"]).upper().startswith("L")
+        try:
+            with contextlib.redirect_stdout(sys.stderr):
+                last = float(t.exchange.fetch_ticker(r["symbol"])["last"])
+            touch = float(r["bid"]) if is_long else float(r["ask"])
+        except Exception:
+            continue
+        hit = last <= touch if is_long else last >= touch
+        if not hit and age < 600:
+            continue
+        out.append([r["ts"], r["symbol"], r["side"], touch, last, 1 if hit else 0, int(age)])
+    if not out:
+        return
+    with open(MAKER_SHADOW, "a", newline="") as f:
+        w = csv.writer(f)
+        if fresh:
+            w.writerow(["ts", "symbol", "side", "touch", "last", "filled", "waited_s"])
+        w.writerows(out)
+    hit_n = sum(1 for x in out if x[5] == 1)
+    log(f"MAKER SHADOW: {hit_n}/{len(out)} limit sentuh kena (kumulatif {len(done) + len(out)})")
+
+
 def run():
     with contextlib.redirect_stdout(sys.stderr):
         t = BinanceFuturesTrader(is_testnet=False)
@@ -1914,6 +1972,7 @@ def run():
     sweep_orphan_orders(t)
 
     managed_syms = manage_open_positions(t)
+    maker_shadow(t)
     news_heads_up(t)
     # Check open positions count vs limit
     open_pos = get_open_positions(t)
