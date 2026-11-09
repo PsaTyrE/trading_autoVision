@@ -1308,7 +1308,28 @@ def scan_and_enter(t):
             log(f"DAILY LOSS CAP: hari ini {_day_pnl:+.2f} USDT <= -{_dlp*100:.0f}% x ${equity:.2f} = {-abs(_dlp*equity):+.2f}. Entry dihentikan sampai 00:00 UTC.")
             return
     except Exception as e:
-        log(f"Daily loss cap error: {e}")
+        # Fallback: endpoint income bisa ditolak -2015 (permission). Breaker harian
+        # tidak boleh mati diam-diam, jadi hitung dari close CSV hari UTC ini.
+        try:
+            _utc_mid = (int(time.time()) // 86400) * 86400
+            _day_pnl = 0.0
+            with open("trade_closed.csv", encoding="utf-8") as _f:
+                for _r in csv.DictReader(_f):
+                    try:
+                        _ts = float(_r.get("ts") or 0)
+                        if _ts > 1e11:
+                            _ts /= 1000.0
+                        if _ts >= _utc_mid:
+                            _day_pnl += float(_r.get("net") or 0)
+                    except Exception:
+                        continue
+            _dlp = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.05"))
+            if daily_loss_blocked(_day_pnl, equity, _dlp):
+                log(f"DAILY LOSS CAP (fallback CSV): hari ini {_day_pnl:+.2f} USDT. Entry dihentikan sampai 00:00 UTC.")
+                return
+            log(f"Daily loss cap fallback CSV: {_day_pnl:+.2f} USDT (income ditolak -2015)")
+        except Exception as e2:
+            log(f"Daily loss cap error: {e} | fallback gagal: {e2}")
 
     # --- MULTI-POSITION CAPACITY CHECK ---
     open_pos = get_open_positions(t)

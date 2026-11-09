@@ -21,33 +21,11 @@
     "UNI/USDT:USDT",
     "WIF/USDT:USDT",
     "WLD/USDT:USDT",
+    "XAG/USDT:USDT",
     "XRP/USDT:USDT",
     "ZEC/USDT:USDT"
   ],
-  "active_trades": {
-    "XAG/USDT:USDT": {
-      "symbol": "XAG/USDT:USDT",
-      "side": "LONG",
-      "entry": 52.65,
-      "qty": 0.757,
-      "sl": 51.77,
-      "tp1": 53.53,
-      "tp2": 54.42,
-      "tp_legs": [
-        [
-          1.0,
-          0.757,
-          53.53
-        ]
-      ],
-      "tp_failed": [],
-      "cluster": "MISC",
-      "ts": 1794215089,
-      "risk": 0.6694,
-      "sl_live": 51.77,
-      "entry_ts": 1794215089
-    }
-  },
+  "active_trades": {},
   "excursions": {
     "BNB/USDT:USDT": {
       "mfe_pct": 0.513,
@@ -56,10 +34,6 @@
     "DOOD/USDT:USDT": {
       "mfe_pct": 0.863,
       "mae_pct": -1.841
-    },
-    "XAG/USDT:USDT": {
-      "mfe_pct": 0.608,
-      "mae_pct": -0.247
     }
   },
   "news_alerted": {
@@ -173,6 +147,10 @@
     "MSTR/USDT:USDT": [
       "84595989",
       "84675600"
+    ],
+    "XAG/USDT:USDT": [
+      "154743328",
+      "154929268"
     ]
   },
   "recon_funding": {
@@ -189,7 +167,8 @@
     "Q/USDT:USDT": 0.11577575,
     "ANTHROPIC/USDT:USDT": -0.00139947,
     "AAVE/USDT:USDT": -0.00089389,
-    "MSTR/USDT:USDT": 0.0
+    "MSTR/USDT:USDT": 0.0,
+    "XAG/USDT:USDT": 0.0
   },
   "active_trade": null
 }

@@ -48,8 +48,26 @@ def fetch_income(ex):
 def main():
     t = BinanceFuturesTrader(is_testnet=False)
     ex = t.exchange
-    with contextlib.redirect_stdout(sys.stderr):
-        rows = fetch_income(ex)
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            rows = fetch_income(ex)
+    except Exception as e:
+        # Tanpa income, angka profit tidak bisa dipertanggungjawabkan. Kirim apa
+        # adanya daripada diam: bot butuh izin baca riwayat (income/userTrades).
+        msg = ("<b>LAPORAN PROFIT GAGAL</b> - %s WIB\n"
+               "Endpoint income ditolak bursa: %s\n"
+               "Artinya: izin baca riwayat (income/userTrades) di API key bermasalah.\n"
+               "Trading tetap jalan (order/posisi/balance normal)."
+               % (datetime.now().strftime("%d %b %H:%M"), str(e)[:120]))
+        print(msg)
+        if "--send" in sys.argv:
+            token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+            chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+            if token and chat:
+                import requests
+                requests.post("https://api.telegram.org/bot%s/sendMessage" % token,
+                              json={"chat_id": chat, "text": msg, "parse_mode": "HTML"}, timeout=20)
+        return 1
         bal = ex.fetch_balance()
         positions = t.get_open_positions() or []
 
