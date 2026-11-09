@@ -81,8 +81,8 @@ def main():
                 requests.post("https://api.telegram.org/bot%s/sendMessage" % token,
                               json={"chat_id": chat, "text": msg, "parse_mode": "HTML"}, timeout=20)
         return 1
-        bal = ex.fetch_balance()
-        positions = t.get_open_positions() or []
+    bal = ex.fetch_balance()
+    positions = t.get_open_positions() or []
 
     tot = {}
     for x in rows:
