@@ -1301,8 +1301,16 @@ def scan_and_enter(t):
     try:
         _dlp = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.05"))
         _utc_mid = (int(time.time()) // 86400) * 86400
-        with contextlib.redirect_stdout(sys.stderr):
-            _inc = t.exchange.fapiPrivateGetIncome({"startTime": _utc_mid * 1000, "limit": 1000})
+        _inc = None
+        for _try in range(3):
+            try:
+                with contextlib.redirect_stdout(sys.stderr):
+                    _inc = t.exchange.fapiPrivateGetIncome({"startTime": _utc_mid * 1000, "limit": 1000})
+                break
+            except Exception:
+                if _try == 2:
+                    raise
+                time.sleep(2)
         _day_pnl = day_pnl_from_income(_inc)
         if daily_loss_blocked(_day_pnl, equity, _dlp):
             log(f"DAILY LOSS CAP: hari ini {_day_pnl:+.2f} USDT <= -{_dlp*100:.0f}% x ${equity:.2f} = {-abs(_dlp*equity):+.2f}. Entry dihentikan sampai 00:00 UTC.")

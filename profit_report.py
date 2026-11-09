@@ -30,11 +30,24 @@ TRADES_PER_DAY = float(os.getenv("ASSUMED_TRADES_PER_DAY", "1.5"))
 RISK_PCT = float(os.getenv("RISK_PCT", "0.02"))
 
 
+def _income_retry(ex, since, tries=3, pause=2.0):
+    """-2015 di endpoint income masih intermiten: ulang dulu sebelum menyerah."""
+    last = None
+    for i in range(tries):
+        try:
+            return ex.fapiPrivateGetIncome({"startTime": since, "limit": 1000}) or []
+        except Exception as e:
+            last = e
+            if i + 1 < tries:
+                time.sleep(pause)
+    raise last
+
+
 def fetch_income(ex):
     rows = []
     since = 1730000000000
     while True:
-        ch = ex.fapiPrivateGetIncome({"startTime": since, "limit": 1000}) or []
+        ch = _income_retry(ex, since)
         if not ch:
             break
         rows += ch
