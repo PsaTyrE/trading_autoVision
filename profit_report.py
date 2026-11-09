@@ -72,19 +72,74 @@ def main():
 
     # statistik dari CSV
     n_close, sum_r, wins = 0, 0.0, 0
+    r_series, ts_series = [], []
     try:
         for r in csv.DictReader(open("trade_closed.csv", encoding="utf-8")):
             try:
                 R = float(r["R"])
-                n_close += 1
-                sum_r += R
-                wins += 1 if R > 0 else 0
             except Exception:
                 continue
+            n_close += 1
+            sum_r += R
+            wins += 1 if R > 0 else 0
+            r_series.append(R)
+            try:
+                _t = float(r.get("ts") or 0)
+                ts_series.append(_t / 1000.0 if _t > 1e11 else _t)
+            except Exception:
+                ts_series.append(0.0)
     except Exception:
         pass
     exp_r = sum_r / n_close if n_close else 0.0
     wr = 100.0 * wins / n_close if n_close else 0.0
+
+    # --- metrik risiko (Sharpe, max drawdown, expectancy per sesi WIB) ---
+    sharpe_t = sharpe_d = mdd = None
+    sess = []
+    try:
+        if len(r_series) >= 5:
+            mu = sum(r_series) / len(r_series)
+            sd = (sum((x - mu) ** 2 for x in r_series) / (len(r_series) - 1)) ** 0.5
+            sharpe_t = mu / sd if sd else None
+    except Exception:
+        pass
+    try:
+        daily = {}
+        for x in rows:
+            if x["incomeType"] not in ("REALIZED_PNL", "COMMISSION", "FUNDING_FEE"):
+                continue
+            d = datetime.fromtimestamp(int(x["time"]) / 1000.0).strftime("%Y-%m-%d")
+            daily[d] = daily.get(d, 0.0) + float(x["income"])
+        if len(daily) >= 5 and deposit > 0:
+            rets = [daily[k] / deposit for k in sorted(daily)]
+            mu = sum(rets) / len(rets)
+            sd = (sum((x - mu) ** 2 for x in rets) / (len(rets) - 1)) ** 0.5
+            sharpe_d = (mu / sd) * (365 ** 0.5) if sd else None
+            eqc, peak, worst = deposit, deposit, 0.0
+            for k in sorted(daily):
+                eqc += daily[k]
+                peak = max(peak, eqc)
+                worst = min(worst, (eqc - peak) / peak * 100.0 if peak else 0.0)
+            mdd = worst
+    except Exception:
+        pass
+    try:
+        buckets = {"Asia 07-14": [], "Eropa 14-20": [], "US 20-04": []}
+        for ts, R in zip(ts_series, r_series):
+            if not ts:
+                continue
+            h = datetime.fromtimestamp(ts).hour
+            if 7 <= h < 14:
+                buckets["Asia 07-14"].append(R)
+            elif 14 <= h < 20:
+                buckets["Eropa 14-20"].append(R)
+            else:
+                buckets["US 20-04"].append(R)
+        for name, arr in buckets.items():
+            if arr:
+                sess.append("%s n=%d exp %+.2fR" % (name, len(arr), sum(arr) / len(arr)))
+    except Exception:
+        pass
 
     # --- CHECKPOINT: validasi filter volume bar 4h (pre-register 2026-11-08) ---
     # Hitung close yang terjadi SETELAH filter aktif, bandingkan dengan syarat FREEZE.md.
@@ -188,6 +243,13 @@ def main():
         lines.append("Posisi terbuka: tidak ada (semua margin bebas)")
     lines.append("")
     lines.append("Track record: %d close | exp %+.3fR | WR %.0f%%" % (n_close, exp_r, wr))
+    if sharpe_t is not None or mdd is not None:
+        lines.append("Risiko   : Sharpe/trade %s | Sharpe harian %s | Max DD %s"
+                     % ("%.2f" % sharpe_t if sharpe_t is not None else "n/a",
+                        "%.1f" % sharpe_d if sharpe_d is not None else "n/a",
+                        "%.1f%%" % mdd if mdd is not None else "n/a"))
+    if sess:
+        lines.append("Per sesi : " + " | ".join(sess))
     if f_n == 0:
         lines.append("Checkpoint filter vol4h: 0/20 close (baru aktif 08 Nov 07:24, belum ada yang close)")
     else:
