@@ -1,8 +1,10 @@
 {
-  "day_key": "2026-11-08",
-  "day_entries": 1,
-  "last_signal_ts": 1794146400000,
+  "day_key": "2026-11-09",
+  "day_entries": 3,
+  "last_signal_ts": 1794229200000,
   "closed_syms": [
+    "AAVE/USDT:USDT",
+    "ANTHROPIC/USDT:USDT",
     "APR/USDT:USDT",
     "BNB/USDT:USDT",
     "BR/USDT:USDT",
@@ -22,20 +24,48 @@
     "ZEC/USDT:USDT"
   ],
   "active_trades": {
-    "ANTHROPIC/USDT:USDT": {
-      "symbol": "ANTHROPIC/USDT:USDT",
-      "side": "SHORT",
-      "entry": 1399.16,
-      "qty": 0.02,
-      "sl": 1432.24,
-      "tp1": 1366.08,
-      "tp2": 1333.0,
-      "tp_legs": [],
+    "XAG/USDT:USDT": {
+      "symbol": "XAG/USDT:USDT",
+      "side": "LONG",
+      "entry": 52.65,
+      "qty": 0.757,
+      "sl": 51.77,
+      "tp1": 53.53,
+      "tp2": 54.42,
+      "tp_legs": [
+        [
+          1.0,
+          0.757,
+          53.53
+        ]
+      ],
       "tp_failed": [],
       "cluster": "MISC",
-      "ts": 1794150399,
-      "risk": 0.6616,
-      "sl_live": 1432.24
+      "ts": 1794215089,
+      "risk": 0.6694,
+      "sl_live": 51.77,
+      "entry_ts": 1794215089
+    },
+    "MSTR/USDT:USDT": {
+      "symbol": "MSTR/USDT:USDT",
+      "side": "SHORT",
+      "entry": 124.95,
+      "qty": 0.19,
+      "sl": 128.4,
+      "tp1": 121.5,
+      "tp2": 118.04,
+      "tp_legs": [
+        [
+          1.0,
+          0.19,
+          121.5
+        ]
+      ],
+      "tp_failed": [],
+      "cluster": "MISC",
+      "ts": 1794233213,
+      "risk": 0.656,
+      "sl_live": 128.4
     }
   },
   "excursions": {
@@ -47,9 +77,13 @@
       "mfe_pct": 0.863,
       "mae_pct": -1.841
     },
-    "ANTHROPIC/USDT:USDT": {
-      "mfe_pct": 0.825,
-      "mae_pct": -0.146
+    "XAG/USDT:USDT": {
+      "mfe_pct": 0.608,
+      "mae_pct": -0.247
+    },
+    "MSTR/USDT:USDT": {
+      "mfe_pct": 0.176,
+      "mae_pct": -0.152
     }
   },
   "news_alerted": {
@@ -57,7 +91,7 @@
     "Unemployment Claims": 1793901609,
     "Average Hourly Earnings m/m": 1793988009
   },
-  "last_entry_ts": 1794150399.7566345,
+  "last_entry_ts": 1794233213.258019,
   "recon_ids": {
     "INJ/USDT:USDT": [
       "816757713",
@@ -150,6 +184,15 @@
       "293186593",
       "293392476",
       "299544496"
+    ],
+    "ANTHROPIC/USDT:USDT": [
+      "12661392",
+      "12661425",
+      "12731479"
+    ],
+    "AAVE/USDT:USDT": [
+      "1013897501",
+      "1014027466"
     ]
   },
   "recon_funding": {
@@ -163,20 +206,28 @@
     "WIF/USDT:USDT": -0.00102672,
     "ZEC/USDT:USDT": 0.00429066,
     "STRK/USDT:USDT": 0.0,
-    "Q/USDT:USDT": 0.11577575
+    "Q/USDT:USDT": 0.11577575,
+    "ANTHROPIC/USDT:USDT": -0.00139947,
+    "AAVE/USDT:USDT": -0.00089389
   },
   "active_trade": {
-    "symbol": "ANTHROPIC/USDT:USDT",
+    "symbol": "MSTR/USDT:USDT",
     "side": "SHORT",
-    "entry": 1399.16,
-    "qty": 0.02,
-    "sl": 1432.24,
-    "tp1": 1366.08,
-    "tp2": 1333.0,
-    "tp_legs": [],
+    "entry": 124.95,
+    "qty": 0.19,
+    "sl": 128.4,
+    "tp1": 121.5,
+    "tp2": 118.04,
+    "tp_legs": [
+      [
+        1.0,
+        0.19,
+        121.5
+      ]
+    ],
     "tp_failed": [],
     "cluster": "MISC",
-    "ts": 1794150399,
-    "risk": 0.6616
+    "ts": 1794233213,
+    "risk": 0.656
   }
 }

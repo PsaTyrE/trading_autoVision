@@ -271,6 +271,15 @@ class BinanceFuturesTrader:
                 positions = self.exchange.fetch_positions()
                 break
             except Exception as e:
+                # TIMESYNC_RETRY: the ccxt offset is measured once at construction.
+                # After an NTP step (a Pi has no RTC) that cached offset is wrong and
+                # every signed request fails -1021 until the process restarts.
+                if "-1021" in str(e):
+                    try:
+                        diff = self.exchange.load_time_difference()
+                        print(f"[Binance Sync] Clock re-synchronized after -1021 (offset: {diff}ms)")
+                    except Exception as _e:
+                        print(f"[!] Clock resync after -1021 failed: {_e}")
                 if attempt < 2:
                     wait = 2 ** attempt  # 1s, 2s
                     print(f"[!] Position fetch attempt {attempt+1}/3 failed: {e}. Retry in {wait}s...")

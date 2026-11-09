@@ -48,6 +48,23 @@ def _is_stop(order: Dict[str, Any]) -> bool:
     return "STOP" in kind
 
 
+def _with_nonce_retry(fn, trader):
+    """TIMESYNC_RETRY: jalankan fn(), dan kalau gagal -1021 resync jam lalu
+    coba sekali lagi. Pi tidak punya RTC; setelah NTP men-step jam, offset
+    ccxt yang di-cache basi dan SEMUA request bertanda tangan ditolak -1021
+    sampai di-resync. Tanpa ini watchdog melapor ERROR palsu (2026-11-09 21:23)."""
+    try:
+        return fn()
+    except Exception as e:
+        if "-1021" not in str(e):
+            raise
+        try:
+            trader.exchange.load_time_difference()
+        except Exception as _e:  # noqa: BLE001 - resync gagal bukan alasan mati
+            print(f"[watchdog] clock resync failed: {_e}", flush=True)
+        return fn()
+
+
 def _trader_for(mode: str):
     """Build (and cache) a trader bound to the live or demo account."""
     from src.live_trader import BinanceFuturesTrader
@@ -81,22 +98,27 @@ def check(trader=None, is_testnet: Optional[bool] = None) -> Dict[str, Any]:
     }
 
     try:
-        positions = trader.get_open_positions()
+        positions = _with_nonce_retry(trader.get_open_positions, trader)
     except Exception as e:  # cannot even see the book -> do not certify
         result["errors"].append(f"positions fetch failed: {e}")
         result["ok"] = False
         return result
 
-    # ONE algo fetch for every symbol (symbol=None). The flag distinguishes
-    # "no stops" (empty list) from "the fetch broke" (must NOT read as naked).
+    # ALGO_PER_SYMBOL: /fapi/v1/allAlgoOrders REQUIRES a symbol and answers
+    # -1102 without one, so sweep one symbol per open position. No positions ->
+    # nothing to protect, and no fetch that could fail. The flag still
+    # distinguishes "no stops" (empty list) from "the fetch broke".
     cond: List[Dict[str, Any]] = []
     cond_ok = True
-    try:
-        cond = trader.get_conditional_orders() or []
-        cond_ok = bool(getattr(trader, "conditional_orders_ok", True))
-    except Exception as e:
-        cond_ok = False
-        result["errors"].append(f"conditional-orders fetch failed: {e}")
+    for _pos in positions:
+        _sym = _pos.get("symbol")
+        try:
+            cond.extend(_with_nonce_retry(lambda s=_sym: trader.get_conditional_orders(s), trader) or [])
+        except Exception as e:
+            cond_ok = False
+            result["errors"].append(f"conditional-orders fetch failed ({_sym}): {e}")
+        if not bool(getattr(trader, "conditional_orders_ok", True)):
+            cond_ok = False
 
     stops_by_sym: Dict[str, List[Dict[str, Any]]] = {}
     for o in cond:
@@ -225,6 +247,21 @@ def alert(result: Dict[str, Any]) -> None:
     notifier.send_message("\n".join(lines))
 
 
+def _resync_clocks() -> None:
+    """CLOCK_RESYNC: re-measure the exchange clock offset for cached traders.
+
+    ``load_time_difference()`` runs once at trader construction. This service is
+    long-lived and starts at boot, before NTP has stepped the Pi clock, so the
+    stored offset is stale for the whole process lifetime and every signed
+    request fails -1021. One /time call per account per cycle is cheap.
+    """
+    for trader in list(_TRADER_CACHE.values()):
+        try:
+            trader.exchange.load_time_difference()
+        except Exception as e:  # noqa: BLE001 - a resync must never kill the loop
+            print(f"[watchdog] clock resync failed: {e}", flush=True)
+
+
 def _render(result: Dict[str, Any], as_json: bool) -> None:
     print(json.dumps(result, indent=2, ensure_ascii=False) if as_json else summary_all(result), flush=True)
 
@@ -247,6 +284,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"[watchdog] starting, interval={args.interval}s, modes={modes}", flush=True)
         while True:
             try:
+                _resync_clocks()  # CLOCK_RESYNC
                 r = check_all(modes)
                 if not args.no_alert:
                     alert(r)
