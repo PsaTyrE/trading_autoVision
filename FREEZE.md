@@ -308,3 +308,26 @@ dan angka bulat, BUKAN optimum statistik (1,36) supaya tidak curve-fitting.
 
 **Konsekuensi yang diterima:** frekuensi entry turun (13 dari 37 historis akan ditolak, ~35%),
 jadi profit lebih lambat per kalender, ditukar dengan kualitas entry.
+
+
+---
+
+## Pre-registrasi 2026-11-12: slippage stop-market (BELUM diubah)
+
+**Pemicu:** 12 Nov 2026 dua loss lewat 1R di token saham —
+SKHYNIX -1,02R (slip -1,55%), EWY -1,14R (slip -0,89%). Total bocor 0,26R dari eksekusi.
+
+**Data yang membantah dugaan awal:** kedalaman top-of-book saat entry justru cukup
+(SKHYNIX $7.638, EWY $3.138, DRAM $28.610). Jadi penyebabnya bukan buku tipis,
+tapi harga lompat melewati stop (gap), bukan ketiadaan lawan transaksi.
+
+**Aturan yang dipra-registrasi (diputuskan SEBELUM data berikutnya ada):**
+- Diukur: rata-rata `slip_pct` dari `slippage.csv` pada 10 close berikutnya (13 Nov - selesai checkpoint).
+- Ambang: rata-rata slip <= 0,15R -> tidak ada perubahan (stop-market dipertahankan).
+- Ambang: rata-rata slip > 0,15R -> stop diganti `STOP` limit dengan buffer 0,5% dari trigger
+  (batas rugi terkunci, risiko tidak terisi saat gap diterima sadar).
+- Yang TIDAK dilakukan: melarang token saham. Tiga trade token saham terbaik
+  (ANTHROPIC +0,60/+0,66, MSTR +1,11, CRCL +1,17) justru dari kelas yang sama,
+  jadi larangan itu akan memotong edge yang sudah terbukti.
+
+**Status:** nol perubahan parameter. Parameter tetap beku sampai checkpoint 20 close.
