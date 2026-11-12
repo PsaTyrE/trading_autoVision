@@ -145,8 +145,26 @@ def check(trader=None, is_testnet: Optional[bool] = None) -> Dict[str, Any]:
         elif stops:
             row["protected"] = True
         else:
-            row["protected"] = False
-            result["naked"].append(sym)
+            # Jendela cancel->place saat trail bisa bikin daftar stop kosong
+            # sesaat. Baca ulang sekali setelah jeda; baru tuduh NAKED kalau
+            # tetap kosong. Stop asli tetap tertangkap, alarm palsu hilang.
+            time.sleep(3)
+            try:
+                again = _with_nonce_retry(lambda s=sym: trader.get_conditional_orders(s), trader) or []
+                again = [o for o in again if _is_stop(o)]
+            except Exception as e:
+                again = None
+                result["errors"].append(f"re-check failed ({sym}): {e}")
+            if again:
+                row["protected"] = True
+                row["stop_orders"] = len(again)
+                row["stop_prices"] = [x.get("triggerPrice") or x.get("stopPrice") for x in again]
+            elif again == []:
+                row["protected"] = False
+                result["naked"].append(sym)
+            else:
+                row["protected"] = None
+                result["unknown"].append(sym)
         result["positions"].append(row)
 
     if result["errors"] or result["naked"] or result["unknown"]:

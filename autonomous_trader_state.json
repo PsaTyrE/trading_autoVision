@@ -1,7 +1,7 @@
 {
-  "day_key": "2026-11-09",
+  "day_key": "2026-11-12",
   "day_entries": 3,
-  "last_signal_ts": 1794229200000,
+  "last_signal_ts": 1794448800000,
   "closed_syms": [
     "AAVE/USDT:USDT",
     "ANTHROPIC/USDT:USDT",
@@ -9,14 +9,18 @@
     "BNB/USDT:USDT",
     "BR/USDT:USDT",
     "BTW/USDT:USDT",
+    "CRCL/USDT:USDT",
     "DOOD/USDT:USDT",
+    "DRAM/USDT:USDT",
     "ENA/USDT:USDT",
+    "EWY/USDT:USDT",
     "GTC/USDT:USDT",
     "INJ/USDT:USDT",
     "IOST/USDT:USDT",
     "JCT/USDT:USDT",
     "MSTR/USDT:USDT",
     "Q/USDT:USDT",
+    "SKHYNIX/USDT:USDT",
     "STRK/USDT:USDT",
     "UNI/USDT:USDT",
     "WIF/USDT:USDT",
@@ -39,9 +43,10 @@
   "news_alerted": {
     "Congressional Elections": 1793735168,
     "Unemployment Claims": 1793901609,
-    "Average Hourly Earnings m/m": 1793988009
+    "Average Hourly Earnings m/m": 1793988009,
+    "FOMC Member Waller Speaks": 1794317408
   },
-  "last_entry_ts": 1794233213.258019,
+  "last_entry_ts": 1794452919.2522633,
   "recon_ids": {
     "INJ/USDT:USDT": [
       "816757713",
@@ -138,7 +143,9 @@
     "ANTHROPIC/USDT:USDT": [
       "12661392",
       "12661425",
-      "12731479"
+      "12731479",
+      "13720031",
+      "13834365"
     ],
     "AAVE/USDT:USDT": [
       "1013897501",
@@ -146,11 +153,29 @@
     ],
     "MSTR/USDT:USDT": [
       "84595989",
-      "84675600"
+      "84675600",
+      "84978534",
+      "85208822"
     ],
     "XAG/USDT:USDT": [
       "154743328",
       "154929268"
+    ],
+    "CRCL/USDT:USDT": [
+      "101880746",
+      "102007110"
+    ],
+    "DRAM/USDT:USDT": [
+      "49266165",
+      "49288848"
+    ],
+    "SKHYNIX/USDT:USDT": [
+      "376739755",
+      "376953247"
+    ],
+    "EWY/USDT:USDT": [
+      "63479191",
+      "63625952"
     ]
   },
   "recon_funding": {
@@ -167,8 +192,12 @@
     "Q/USDT:USDT": 0.11577575,
     "ANTHROPIC/USDT:USDT": -0.00139947,
     "AAVE/USDT:USDT": -0.00089389,
-    "MSTR/USDT:USDT": 0.0,
-    "XAG/USDT:USDT": 0.0
+    "MSTR/USDT:USDT": -0.00471581,
+    "XAG/USDT:USDT": 0.0,
+    "CRCL/USDT:USDT": -0.00255515,
+    "DRAM/USDT:USDT": 0.0,
+    "SKHYNIX/USDT:USDT": 0.0,
+    "EWY/USDT:USDT": 0.0
   },
   "active_trade": null
 }
