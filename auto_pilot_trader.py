@@ -1875,6 +1875,24 @@ def scan_and_enter(t):
                                   "top_depth_usdt", "notional", "fee_rt"])
                 _pw.writerow([int(time.time()), sym, side_str, _bb, _ba,
                               round(_spr, 5), round(_dep, 2), round(notional, 2), round(fee_rt, 4)])
+            # ENTRY_FEAT: fitur pra-entry untuk uji variabel pasca-checkpoint.
+            _fp = os.path.join(BASE_DIR, "entry_feat.csv")
+            _newf = not os.path.exists(_fp)
+            _hr = (time.gmtime().tm_hour + 7) % 24
+            _ses = "ASIA" if 7 <= _hr < 14 else ("EU" if 14 <= _hr < 20 else "US")
+            with open(_fp, "a", newline="") as _ff:
+                _fw = csv.writer(_ff)
+                if _newf:
+                    _fw.writerow(["ts", "symbol", "side", "ai_conf", "vol_ratio", "rsi",
+                                  "adx", "atr_pct", "sl_pct", "spread_pct", "depth_usdt",
+                                  "score", "hour_wib", "session", "notional", "risk_usd"])
+                _fw.writerow([int(time.time()), sym, side_str, round(float(ai_res.confidence), 3),
+                              round(float(meta["vol_ratio"]), 3), round(float(meta.get("rsi") or 0.0), 1),
+                              round(float(meta.get("adx") or 0.0), 1),
+                              round(meta["atr"] / price * 100, 3),
+                              round(sl_dist / price * 100, 3), round(_spr, 5), round(_dep, 2),
+                              meta.get("score", 50), _hr, _ses,
+                              round(notional, 2), round(risk_real, 3)])
             log(f"MAKER PROBE {sym}: spread {_spr:.3f}% top depth ${_dep:.0f} vs fee taker ${fee_rt:.4f}")
         except Exception as _mpe:
             log(f"MAKER PROBE skip {sym}: {err_detail(_mpe)}")

@@ -1,8 +1,9 @@
 {
-  "day_key": "2026-11-12",
+  "day_key": "2026-11-13",
   "day_entries": 3,
-  "last_signal_ts": 1794448800000,
+  "last_signal_ts": 1794578400000,
   "closed_syms": [
+    "1000PEPE/USDT:USDT",
     "AAVE/USDT:USDT",
     "ANTHROPIC/USDT:USDT",
     "APR/USDT:USDT",
@@ -19,6 +20,7 @@
     "IOST/USDT:USDT",
     "JCT/USDT:USDT",
     "MSTR/USDT:USDT",
+    "MUU/USDT:USDT",
     "Q/USDT:USDT",
     "SKHYNIX/USDT:USDT",
     "STRK/USDT:USDT",
@@ -29,7 +31,29 @@
     "XRP/USDT:USDT",
     "ZEC/USDT:USDT"
   ],
-  "active_trades": {},
+  "active_trades": {
+    "SOL/USDT:USDT": {
+      "symbol": "SOL/USDT:USDT",
+      "side": "SHORT",
+      "entry": 79.98,
+      "qty": 0.31,
+      "sl": 82.16,
+      "tp1": 77.8,
+      "tp2": 75.62,
+      "tp_legs": [
+        [
+          1.0,
+          0.31,
+          77.8
+        ]
+      ],
+      "tp_failed": [],
+      "cluster": "SOL_MEME",
+      "ts": 1794582931,
+      "risk": 0.6762,
+      "sl_live": 82.16
+    }
+  },
   "excursions": {
     "BNB/USDT:USDT": {
       "mfe_pct": 0.513,
@@ -38,6 +62,10 @@
     "DOOD/USDT:USDT": {
       "mfe_pct": 0.863,
       "mae_pct": -1.841
+    },
+    "SOL/USDT:USDT": {
+      "mfe_pct": 1.263,
+      "mae_pct": -0.275
     }
   },
   "news_alerted": {
@@ -46,7 +74,7 @@
     "Average Hourly Earnings m/m": 1793988009,
     "FOMC Member Waller Speaks": 1794317408
   },
-  "last_entry_ts": 1794452919.2522633,
+  "last_entry_ts": 1794582931.6127641,
   "recon_ids": {
     "INJ/USDT:USDT": [
       "816757713",
@@ -176,6 +204,14 @@
     "EWY/USDT:USDT": [
       "63479191",
       "63625952"
+    ],
+    "1000PEPE/USDT:USDT": [
+      "2896988002",
+      "2897262531"
+    ],
+    "MUU/USDT:USDT": [
+      "26783385",
+      "26829397"
     ]
   },
   "recon_funding": {
@@ -197,7 +233,28 @@
     "CRCL/USDT:USDT": -0.00255515,
     "DRAM/USDT:USDT": 0.0,
     "SKHYNIX/USDT:USDT": 0.0,
-    "EWY/USDT:USDT": 0.0
+    "EWY/USDT:USDT": 0.0,
+    "1000PEPE/USDT:USDT": 0.0,
+    "MUU/USDT:USDT": 0.0
   },
-  "active_trade": null
+  "active_trade": {
+    "symbol": "SOL/USDT:USDT",
+    "side": "SHORT",
+    "entry": 79.98,
+    "qty": 0.31,
+    "sl": 82.16,
+    "tp1": 77.8,
+    "tp2": 75.62,
+    "tp_legs": [
+      [
+        1.0,
+        0.31,
+        77.8
+      ]
+    ],
+    "tp_failed": [],
+    "cluster": "SOL_MEME",
+    "ts": 1794582931,
+    "risk": 0.6762
+  }
 }
