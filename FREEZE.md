@@ -331,3 +331,24 @@ tapi harga lompat melewati stop (gap), bukan ketiadaan lawan transaksi.
   jadi larangan itu akan memotong edge yang sudah terbukti.
 
 **Status:** nol perubahan parameter. Parameter tetap beku sampai checkpoint 20 close.
+
+
+---
+
+## Mandat 2026-11-13: kewenangan tutup posisi
+
+User menyerahkan keputusan tutup posisi ke assistant. Supaya tidak jadi intervensi
+liar yang merusak pengukuran, kewenangan itu dibatasi tiga pemicu saja:
+
+1. **Stop hilang di exchange** - posisi tanpa order proteksi (dikonfirmasi 2x baca).
+   Tindakan: flatten seketika. Ini kegagalan proteksi, bukan keputusan trading.
+2. **Dead money** - posisi terbuka >24 jam dengan |R| < 0,20 DAN tren bar 4h sudah
+   berbalik melawan posisi. Tindakan: tutup di harga pasar.
+3. **TP/SL tersentuh** - ditangani bot, bukan intervensi.
+
+Yang **tidak** dibenarkan: menutup posisi merah cuma karena takut, menutup posisi
+hijau sebelum TP karena ingin mengunci, atau menutup karena berita. Semua itu
+menambah variabel dan membuat exp/R tidak lagi mencerminkan strategi.
+
+Setiap close manual wajib dicatat alasannya (pemicu 1/2/3) supaya bisa diaudit
+dan dikeluarkan dari statistik strategi kalau perlu.
