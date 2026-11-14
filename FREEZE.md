@@ -352,3 +352,31 @@ menambah variabel dan membuat exp/R tidak lagi mencerminkan strategi.
 
 Setiap close manual wajib dicatat alasannya (pemicu 1/2/3) supaya bisa diaudit
 dan dikeluarkan dari statistik strategi kalau perlu.
+
+
+---
+
+## Target 2026-11-14: equity $100 pada 2027-02-14 (90 hari)
+
+**Titik awal:** equity $59,67. Target $100 = +67,6% dalam 90 hari = **+0,574%/hari**.
+Baseline sekarang 0,26%/hari (risk 2%, exp 0,103R, ~2,5 close/hari). Butuh ~2,2x.
+
+**Syarat matematis yang harus dipenuhi bersamaan:**
+- exp >= +0,15R per close
+- risk 3% (dibuka hanya setelah syarat ladder terpenuhi)
+- frekuensi >= 2,5 close/hari
+
+**Gerbang go/no-go (diputuskan sebelum data ada):**
+
+| tanggal | yang diukur | lulus jika | gagal maka |
+|---|---|---|---|
+| 2026-11-20 | checkpoint vol4h 20/20 | exp >= +0,15R | cabut filter, baseline ulang |
+| 2026-11-30 | exp 20 close pasca-putusan | exp >= +0,15R | target turun jadi $75, risk tetap 2% |
+| 2026-12-31 | equity | >= $68 (+14%) | evaluasi ulang pendekatan |
+| 2027-01-31 | equity | >= $82 | target turun, jangan naikkan risk |
+| 2027-02-14 | equity | >= $100 | target meleset, dilaporkan apa adanya |
+
+**Larangan tegas:** menaikkan risk di atas 3% untuk mengejar tanggal, atau menambah
+syarat entry baru di tengah jalan, DILARANG. Satu-satunya jalur ke target adalah exp.
+
+**Ambang berhenti (dari mandat sebelumnya):** equity < $47 atau 4 minggu berturut exp negatif.
