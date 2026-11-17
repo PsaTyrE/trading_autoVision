@@ -380,3 +380,27 @@ Baseline sekarang 0,26%/hari (risk 2%, exp 0,103R, ~2,5 close/hari). Butuh ~2,2x
 syarat entry baru di tengah jalan, DILARANG. Satu-satunya jalur ke target adalah exp.
 
 **Ambang berhenti (dari mandat sebelumnya):** equity < $47 atau 4 minggu berturut exp negatif.
+
+
+---
+
+## Putusan checkpoint filter vol4h - GAGAL (2026-11-17)
+
+**Hipotesis (dipra-registrasi 2026-11-08):** entry hanya di bar 4h dengan volume
+>= 0,6x rata-rata 20 bar akan menaikkan expectancy.
+
+**Hasil (19 close, 2026-11-08 07:24 s/d 2026-11-17 22:36 WIB):**
+- WR **42%** (ambang lulus 50%)
+- exp **-0,130R** (ambang lulus +0,15R)
+- Lunas secara matematis: dengan 1 close tersisa, exp maksimum yang mungkin
+  (-2,47 + 1,0)/20 = **-0,074R** - tetap gagal. Tidak perlu menunggu close ke-20.
+
+**Putusan:** filter **DICABUT**. `MIN_VOLR_4H=0`. Alasan: tidak menaikkan edge;
+sampel 19 close konsisten di bawah ambang, bukan soal keberuntungan satu-dua trade.
+
+**Pembanding sebelum filter (2026-10 s/d 08 Nov):** exp +0,13R pada 46 close.
+Artinya filter ini tidak menambah apa pun yang bisa dibuktikan.
+
+**Langkah berikut (dipra-registrasi):** ukur baseline 20 close tanpa filter.
+Sesudah itu uji kandidat #2 (ladder TP: avg win 0,66R vs avg loss 0,81R,
+payoff 0,82:1 - lihat catatan 2026-11-15). Filter sesi ditunda sesudahnya.
