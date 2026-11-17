@@ -84,6 +84,29 @@ JOURNAL = os.getenv("JOURNAL_FILE", os.path.join(BASE_DIR, "trade_log.csv"))
 CLOSED = os.getenv("CLOSED_FILE", os.path.join(BASE_DIR, "trade_closed.csv"))
 DAILY_CAP_SEC = int(os.getenv("DAILY_CAP_SEC", "86400"))
 DAILY_MAX = int(os.getenv("MAX_DAILY_ENTRIES", "3"))
+
+REGIME_FILE = os.path.join(BASE_DIR, "regime_state.json")
+
+
+def regime_go():
+    """Entry hanya kalau exp strategi ini di 30 hari terakhir >= +0,10R.
+
+    Diukur regime_monitor.py (cron harian). Fail-closed: file hilang, basi
+    >3 hari, atau exp di bawah ambang -> entry diblokir.
+    """
+    try:
+        d = json.load(open(REGIME_FILE, encoding="utf-8"))
+        if time.time() - float(d.get("ts") or 0) > 3 * 86400:
+            log("REGIME: state basi (>3 hari), entry diblokir")
+            return False
+        ok = bool(d.get("go")) and float(d.get("exp") or -9) >= 0.10
+        if not ok:
+            log(f"REGIME NOGO: exp {d.get('exp')}R n={d.get('n')} (syarat +0,10R)")
+        return ok
+    except Exception as e:
+        log(f"REGIME: state tidak terbaca ({err_detail(e)}), entry diblokir")
+        return False
+
 RISK_USDT = float(os.getenv("RISK_USDT", "0"))  # 0 = auto compounding dari equity live
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 MIN_NOTIONAL = 5.0
@@ -1356,6 +1379,10 @@ def scan_and_enter(t):
     _prev = int(st.get("day_entries") or 0) if st.get("day_key") == _today else 0
     if _prev >= DAILY_MAX:
         log(f"Daily cap reached ({_prev}/{DAILY_MAX} untuk hari UTC {_today}; reset 00:00 UTC = 07:00 WIB). Waiting.")
+        return
+
+    # --- REGIME GATE ---
+    if not regime_go():
         return
 
     # --- SCAN CLOSED 4h BARS ---

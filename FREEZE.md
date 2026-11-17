@@ -477,3 +477,30 @@ follow-through. Satu-satunya bucket yang untung adalah volume expansion
 Rencana: uji entry breakout volume-expansion **di shadow** (tanpa uang) minimal
 20 sinyal, diukur dari kline setelah sinyal muncul. Baru bicara uang kalau
 shadow itu exp >= +0,15R.
+
+
+---
+
+## REGIME GATE (dipra-registrasi 2026-11-17, sebelum dipakai)
+
+**Masalah:** backtest 117 hari, 49 simbol, biaya realistis:
+```
+              semua     30% terbaru   15% terbaru
+breakout     +0,133R     -0,720R       -0,752R
+pullback     -0,199R     -0,558R       -0,362R
+meanrev      -0,076R     -0,250R       -0,277R
+```
+Semua keluarga entry negatif di pasar sekarang. Per kuartal pullback/breakout:
+Q1 +0,534R -> Q2 +0,180R -> Q3 -0,272R -> Q4 -0,767R. Edge tidak hilang karena
+setelan; rezim berubah.
+
+**Aturan gate (dikunci):**
+- `regime_monitor.py` (cron 07:10 WIB) menghitung exp strategi pullback di
+  **30 hari terakhir** dari candle 4h tertutup, biaya fee 0,039% + slip 0,075R.
+- Entry diizinkan hanya kalau **n >= 15** dan **exp >= +0,10R**.
+- File `regime_state.json` lebih tua dari 3 hari -> entry diblokir (fail-closed).
+- Tidak ada override manual. Kalau gate bilang tidak, bot tidak entry.
+
+**Kenapa bukan curve fitting:** ambang tidak dipilih dari hasil trade bot, tapi
+dari backtest yang sama sekali terpisah dari eksekusi live, dan diukur bergulir
+(30 hari) bukan dioptimalkan pada satu periode.
