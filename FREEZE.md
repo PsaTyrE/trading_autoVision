@@ -404,3 +404,38 @@ Artinya filter ini tidak menambah apa pun yang bisa dibuktikan.
 **Langkah berikut (dipra-registrasi):** ukur baseline 20 close tanpa filter.
 Sesudah itu uji kandidat #2 (ladder TP: avg win 0,66R vs avg loss 0,81R,
 payoff 0,82:1 - lihat catatan 2026-11-15). Filter sesi ditunda sesudahnya.
+
+
+---
+
+## Pra-registrasi: uji gate momentum entry (2026-11-17)
+
+**Konteks:** checkpoint vol4h gagal (exp -0,130R, dicabut 2026-11-17).
+Median MFE 48 trade = **0,65R**, 31/48 tidak pernah lewat 0,8R. Diagnosis: entry
+tidak punya follow-through. Exit tuning sudah dibuktikan bukan solusi (TP ladder
+tidak bisa menolong trade yang tidak pernah sampai 1R).
+
+**Yang diuji:** satu gate momentum di entry, dipilih dari `entry_feat.csv`.
+
+**Aturan pemilihan variabel (dikunci SEBELUM data dianalisis):**
+1. Kandidat variabel: ai_conf, vol_ratio, RSI, ADX, ATR%, spread, depth, sesi.
+2. Sampel minimum: 20 entry tercatat. Bucket harus punya >= 7 trade.
+3. Variabel dipilih = yang punya selisih exp terbesar antara bucket atas dan bawah,
+   dengan syarat selisih >= 0,30R. Kalau tidak ada yang >= 0,30R -> **tidak ada gate
+   yang dipasang**, dan uji dinyatakan gagal tanpa menyentuh parameter.
+4. Ambang = median sampel (bukan angka yang dioptimalkan).
+5. Hanya SATU variabel. Bukan dua, bukan kombinasi.
+6. Gate dipasang sebagai kode baru, bukan dengan mengubah ambang yang sudah ada.
+
+**Kriteria lulus (20 close setelah gate):**
+- exp >= **+0,10R**
+- WR >= **45%** (turun dari 50% karena gate selektif biasanya menurunkan WR)
+- Jumlah kandidat lolos tetap >= ~40/hari (dicek dari funnel log)
+
+**Kalau gagal:** gate dicabut, ditulis di sini dengan angka, dan **bot dihentikan**.
+Tidak ada uji variabel ketiga. Dua kegagalan (vol4h, gate momentum) = bukti cukup
+bahwa pendekatan pullback ini tidak punya edge yang bisa ditemukan lewat tuning.
+
+**Batas waktu:** analisis dilakukan paling lambat **2026-11-28**. Kalau sampai
+tanggal itu `entry_feat.csv` belum mencapai 20 entry, uji dibatalkan dan bot
+dihentikan (bukan diperpanjang tanpa batas).
