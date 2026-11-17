@@ -439,3 +439,41 @@ bahwa pendekatan pullback ini tidak punya edge yang bisa ditemukan lewat tuning.
 **Batas waktu:** analisis dilakukan paling lambat **2026-11-28**. Kalau sampai
 tanggal itu `entry_feat.csv` belum mencapai 20 entry, uji dibatalkan dan bot
 dihentikan (bukan diperpanjang tanpa batas).
+
+
+---
+
+## Putusan gate momentum - GAGAL di tahap seleksi variabel (2026-11-17)
+
+**Metode:** backfill fitur dari candle 4h tertutup untuk 54 dari 63 close
+(9 gagal: simbol /PARTIAL dan token saham ANTHROPIC tidak ada di binanceusdm).
+
+**Hasil bucket volr4h (satu-satunya variabel dengan selisih besar):**
+```
+0,0-0,7  n=20  exp -0,186R  WR 30%
+0,7-1,0  n=10  exp -0,035R  WR 60%
+1,0-1,3  n=11  exp -0,144R  WR 36%
+1,3-1,8  n= 4  exp -0,300R  WR 25%
+>=1,8    n= 9  exp +0,752R  WR 89%
+```
+Split median (0,93): atas +0,070R vs bawah -0,073R = **+0,142R**.
+Ambang pra-registrasi +0,30R -> **TIDAK LULUS**.
+
+**Kenapa tidak dipasang:** bentuknya spike di ujung, bukan gradien. Bucket
+1,3-1,8 negatif (-0,300R) lalu >=1,8 melonjak. WR 89% pada n=9 adalah noise,
+bukan edge. Memasang gate >=1,8 = mencocokkan angka ke sampel kecil, kesalahan
+yang sama dengan filter vol4h.
+
+**Putusan:**
+- Tidak ada gate dipasang. Nol parameter strategi berubah.
+- `MAX_DAILY_ENTRIES=0` -> **entry live dihentikan**. Posisi terbuka (kalau ada)
+  tetap dikelola trail + watchdog.
+- Dua hipotesis gugur: filter vol4h, gate momentum.
+
+**Arah berikutnya (bukan tuning, ini ganti keluarga entry):**
+Data MFE menunjukkan median gerak hanya 0,65R - pullback tidak dapat
+follow-through. Satu-satunya bucket yang untung adalah volume expansion
+(>=1,8x), yang secara karakter adalah **momentum/breakout**, bukan pullback.
+Rencana: uji entry breakout volume-expansion **di shadow** (tanpa uang) minimal
+20 sinyal, diukur dari kline setelah sinyal muncul. Baru bicara uang kalau
+shadow itu exp >= +0,15R.
