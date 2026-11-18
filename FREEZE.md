@@ -504,3 +504,27 @@ setelan; rezim berubah.
 **Kenapa bukan curve fitting:** ambang tidak dipilih dari hasil trade bot, tapi
 dari backtest yang sama sekali terpisah dari eksekusi live, dan diukur bergulir
 (30 hari) bukan dioptimalkan pada satu periode.
+
+
+---
+
+## 1D BREAKOUT (pra-registrasi 2026-11-18, sebelum live)
+
+Backtest 1D, 22 koin likuid, 2,5 tahun (2024-05..2026-11), fee 0,039% + slip 0,075R:
+```
+ladder40  n=491  exp +0,135R  WR 56%  PF 1,32  | 16,3 sinyal/bulan
+          kuartal +0,22 +0,16 -0,08 +0,19  (3/4 positif)
+ladder20  n=491  exp +0,132R  (hold 20 hari, dipakai)
+fast30    n=491  exp +0,100R  (ditolak, edge turun)
+```
+Aturan entry: close 1D > high 20 hari, volume >= 1,5x rata-rata 20, close > EMA50.
+Exit: SL 2xATR(14,1D), ladder 1,0/1,2/1,4/1,7R (26/24/22/18%), runner 10%, trail
+0,75R setelah 2R, time exit 20 hari.
+
+**Kenapa beda dari 4h:** positif di 3 dari 4 kuartal lintas 2,5 tahun (4h hanya di
+paruh-1). Fee 0,06% round trip vs target 1,7R -> tidak signifikan.
+
+**Batas risiko (dikunci):** risk 2% per trade, maks 8 posisi (heat 16%), leverage 3x
+isolated. Tidak menyerap semua sinyal (16,3/bulan, kapasitas ~8) — sadar dan disengaja.
+
+**Review di 20 close.** Lulus (exp >= +0,10R, WR >= 45%) -> lanjut. Gagal -> cabut.
