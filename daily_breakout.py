@@ -67,7 +67,7 @@ def build_universe(ex):
             if s.endswith("/USDT:USDT") and t.get("quoteVolume")]
     cand.sort(key=lambda x: -x[1])
     out = []
-    for s, _ in cand[:40]:
+    for s, _ in cand[:70]:
         try:
             if len(ex.fetch_ohlcv(s, "1d", limit=MIN_BARS + 5)) >= MIN_BARS:
                 out.append(s)
@@ -185,16 +185,16 @@ def manage(t, ex, st):
         age_d = (time.time() - rec["opened"]) / 86400
         if age_d >= HOLD_DAYS:
             log("%s: time exit %.0f hari" % (base, age_d))
-            t.close_position(base)
+            t.close_position(sym)
             tg("<b>TIME EXIT</b> %s %.0f hari" % (base, age_d))
             st.pop(sym, None)
             continue
-        px = t.get_ticker(base)["last"]
+        px = t.get_ticker(sym)["last"]
         rec["best"] = max(rec.get("best", rec["entry"]), px)
         if rec["best"] >= rec["entry"] + TRAIL_AFTER * r:
             new_sl = rec["best"] - TRAIL_DIST * r
             if new_sl > rec["sl"] + 1e-9:
-                if t.set_protective_stop(base, new_sl, position_side="LONG"):
+                if t.set_protective_stop(sym, new_sl, position_side="LONG"):
                     log("%s: trail SL %.6g -> %.6g" % (base, rec["sl"], new_sl))
                     rec["sl"] = new_sl
         st[sym] = rec
