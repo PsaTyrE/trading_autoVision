@@ -172,6 +172,32 @@ def open_trade(t, ex, sig, dry):
             "best": entry, "ts": time.time()}
 
 
+def record_close(t, sym, rec):
+    """Posisi sudah tutup: hitung realized dari income, tulis daily_trades.csv."""
+    base = sym.split("/")[0]
+    try:
+        rows = t.exchange.fapiPrivateGetIncome({"symbol": base + "USDT",
+                                                "startTime": int(rec["opened"]) * 1000,
+                                                "limit": 1000})
+    except Exception as e:
+        log("%s: income gagal (%s)" % (base, str(e)[:60]))
+        return
+    pnl = sum(float(r["income"]) for r in rows
+              if r.get("incomeType") in ("REALIZED_PNL", "COMMISSION", "FUNDING_FEE"))
+    risk_usd = rec["qty"] * rec["r"]
+    R = pnl / risk_usd if risk_usd else 0.0
+    path = os.path.join(BASE, "daily_trades.csv")
+    new = not os.path.exists(path)
+    with open(path, "a", encoding="utf-8") as f:
+        if new:
+            f.write("ts,symbol,entry,sl,qty,pnl_usd,R,hold_h\n")
+        f.write("%d,%s,%.8g,%.8g,%s,%.4f,%.3f,%.1f\n" % (
+            int(time.time()), base, rec["entry"], rec["sl"], rec["qty"], pnl, R,
+            (time.time() - rec["opened"]) / 3600))
+    log("%s: TUTUP pnl $%.4f (%.2fR) dicatat" % (base, pnl, R))
+    tg("<b>CLOSE</b> %s | PnL $%.4f (%.2fR)" % (base, pnl, R))
+
+
 def manage(t, ex, st):
     pos = {p["symbol"].split("/")[0]: p for p in t.get_open_positions()}
     for sym in list(st.keys()):
@@ -181,7 +207,7 @@ def manage(t, ex, st):
         base = sym.split("/")[0]
         p = pos.get(base)
         if not p:
-            log("%s: posisi sudah tutup, state dibersihkan" % base)
+            record_close(t, sym, rec)
             st.pop(sym, None)
             continue
         r = rec["r"]
@@ -190,6 +216,8 @@ def manage(t, ex, st):
             log("%s: time exit %.0f hari" % (base, age_d))
             t.close_position(sym)
             tg("<b>TIME EXIT</b> %s %.0f hari" % (base, age_d))
+            time.sleep(2)
+            record_close(t, sym, rec)
             st.pop(sym, None)
             continue
         px = t.get_ticker(sym)["last"]
