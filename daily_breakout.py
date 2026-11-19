@@ -142,11 +142,14 @@ def open_trade(t, ex, sig, dry):
         log("%s: qty 0 (risk $%.2f / R $%.2f) - lewat" % (sym, risk_usd, r))
         return None
     msg = ("<b>ENTRY 1D BREAKOUT</b>\n%s\nHarga %.6g | SL %.6g (%.2f%%)\n"
-           "Qty %s | Risk $%.2f (1%%) | R $%.2f" % (sym, px, sl, 100 * r / px, qty, risk_usd, r))
+           "Qty %s | Risk $%.2f (%.0f%%) | R %.6g" % (sym, px, sl, 100 * r / px, qty, risk_usd, 100 * RISK_PCT, r))
     if dry:
         log("DRY " + msg.replace("\n", " | "))
         return None
-    t.setup_symbol_settings(sym, leverage=3, margin_type="ISOLATED")
+    try:
+        t.setup_symbol_settings(sym, leverage=3, margin_type="ISOLATED")
+    except Exception as e:
+        log("%s: setup margin dilewat (%s)" % (sym, str(e)[:60]))
     od = t.place_market_order(sym, "buy", qty)
     if not od:
         log("%s: market order GAGAL" % sym)
