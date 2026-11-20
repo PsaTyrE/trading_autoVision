@@ -337,3 +337,31 @@ Bila benar, exp naik dari +0,02R (bursa, 30 hari) ke ~+0,10R.
 **Risiko yang diterima.** 24% trade yang dulu bisa jalan ke 1R+ kini separuh
 posisinya keluar di 0,5R. Kalau distribusi MFE bergeser (pasar trending kuat),
 perubahan ini merugikan - itu sebabnya dinilai di 20 close, bukan selamanya.
+
+---
+
+## Pre-register #3 - TIME STOP 24 jam (2026-11-20, sebelum hasil diketahui)
+
+**Hipotesis.** 12 dari 50 close (24%) keluar nyaris nol (|net| < $0,05) = trade
+datar yang menghabiskan slot. Dengan MAX_OPEN_POSITIONS=3 dan ~1,7 entry/hari,
+slot yang nyangkut menolak sinyal yang lebih baik.
+
+**Perubahan.** Posisi yang umurnya >= 24 jam DAN MFE-nya belum pernah mencapai
+0,5R ditutup di pasar. Posisi yang sudah pernah menyentuh 0,5R tidak disentuh
+(trailing/ladder yang mengurus). Konstanta: TIME_STOP_H=24, TIME_STOP_MIN_R=0,5.
+
+**Estimasi sebelum jalan.** Tidak ada klaim kenaikan exp. Yang diukur: berapa
+scratch yang tercipta vs berapa win yang hilang karena dipotong di 24 jam.
+Kalau trade datar 24 jam punya peluang sama besar jadi win atau loss (koin
+acak), memotongnya tidak mengubah exp - yang berubah hanya kecepatan modal
+berputar. Jadi ini eksperimen efisiensi, bukan klaim edge.
+
+**Metrik keberhasilan (dinilai setelah 20 close baru):**
+- Lulus: jumlah close/hari naik >= 20% DAN exp tidak turun (>= +0,02R).
+- Gagal: exp turun di bawah +0,02R atau ada >= 3 trade yang ditutup time-stop
+  lalu harga bergerak >= 1R ke arah posisi dalam 24 jam berikutnya -> matikan
+  (TIME_STOP_H=0).
+
+**Risiko yang diterima.** Sebagian trade datar memang baru bergerak di hari
+kedua. Time stop memotong potensi itu. Karena itu kegagalan diukur dari harga
+SETELAH penutupan, bukan dari perasaan.

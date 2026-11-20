@@ -113,6 +113,8 @@ MAX_SL_PCT = float(os.getenv("MAX_SL_PCT", "5.0"))
 LADDER_LEVELS = [0.5, 1.0, 1.7]
 LADDER_WEIGHTS = [0.50, 0.25, 0.15]
 LADDER_RUNNER_PCT = 0.10          # porsi qty yang tidak dipasangi TP
+TIME_STOP_H = float(os.getenv("TIME_STOP_H", "24"))  # jam; 0 = mati
+TIME_STOP_MIN_R = 0.5             # wajib pernah sentuh 0,5R sebelum batas ini
 REARM_MAX_TRIES = 3               # batas percobaan re-arm per posisi
 TP_DUP_TOL = 2e-4                 # toleransi harga saat cek "order TP ini sudah ada?"
 NEWS_TAG_TITLE_WINDOW_MIN = 180   # judul berita cuma ditempel kalau |menit| <= ini
@@ -1003,6 +1005,32 @@ def manage_open_positions(t):
             st["excursions"] = _exc
         except Exception:
             pass
+
+        # --- TIME STOP ---
+        # Trade datar 24 jam = modal mati di slot terbatas. Tutup dan pakai
+        # slotnya untuk sinyal lain. Guard: hanya kalau belum pernah sentuh 0,5R,
+        # supaya posisi yang sedang jalan tidak dipotong.
+        try:
+            _tso = int(trade_meta.get("ts") or 0)
+            if TIME_STOP_H > 0 and _tso > 0 and r_dist > 0 and entry > 0:
+                _age_h = (time.time() - _tso) / 3600.0
+                _mfe = float(((st.get("excursions") or {}).get(symbol) or {}).get("mfe_pct") or 0.0)
+                _need = (r_dist / entry) * 100.0 * TIME_STOP_MIN_R
+                if _age_h >= TIME_STOP_H and _mfe < _need:
+                    log(f"TIME STOP {symbol}: {_age_h:.1f} jam, MFE {_mfe:.2f}% < {TIME_STOP_MIN_R:g}R ({_need:.2f}%) - tutup")
+                    _cr = t.close_position(symbol)
+                    if _cr:
+                        try:
+                            TelegramNotifier().send_message(
+                                f"\u23f1 <b>TIME STOP</b> {symbol}\n"
+                                f"Umur {_age_h:.0f} jam, MFE cuma {_mfe:.2f}% (butuh {_need:.2f}% = {TIME_STOP_MIN_R:g}R)\n"
+                                f"Ditutup supaya slot tidak nyangkut di trade datar.")
+                        except Exception:
+                            pass
+                        continue
+                    log(f"TIME STOP FAILED {symbol}: {err_detail(_cr)}")
+        except Exception as _tse:
+            log(f"TIME STOP ERROR {symbol}: {err_detail(_tse)}")
 
         # Simpan SL yang BENAR-BENAR terpasang di exchange. at["sl"] adalah SL awal dari
         # sinyal; setelah trailing angka itu basi, dan pengukuran slippage jadi salah.
