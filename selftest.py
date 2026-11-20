@@ -186,16 +186,17 @@ check("re-arm pakai tp_legs kalau ada",
 
 _tm_old = {"entry": 0.004979, "sl": 0.005892, "tp1": 0.004066, "tp2": 0.003152}
 _legs_old = A._tp_legs_for(_tm_old, "SHORT", 1005)
-check("re-arm rekonstruksi 1,0/1,2/1,4/1,7R (bukan 2R level strategi)",
-      len(_legs_old) == 4 and abs(_legs_old[1][1] - 0.003883) < 1e-6
+check("re-arm rekonstruksi 0,5/1,0/1,7R (bukan 2R level strategi)",
+      len(_legs_old) == 3 and abs(_legs_old[1][1] - 0.004066) < 1e-6
+      and abs(_legs_old[0][1] - 0.0045225) < 1e-6
       and all(abs(_p - 0.003152) > 1e-6 for _q, _p in _legs_old))
 
 check("re-arm tanpa info entry/SL -> tidak memasang apa pun",
       A._tp_legs_for({"entry": 0, "sl": 0}, "SHORT", 10) == [])
 
 # --- 21. hardcode cleanup: konstanta tunggal + stop param --------------------
-check("ladder: levels satu sumber kebenaran", A.LADDER_LEVELS == [1.0, 1.2, 1.4, 1.7])
-check("ladder: bobot 0,26/0,24/0,22/0,18 (jumlah 0,90)",
+check("ladder: levels satu sumber kebenaran", A.LADDER_LEVELS == [0.5, 1.0, 1.7])
+check("ladder: bobot 0,50/0,25/0,15 (jumlah 0,90)",
       abs(sum(A.LADDER_WEIGHTS) - 0.90) < 1e-9
       and all(b < a for a, b in zip(A.LADDER_WEIGHTS, A.LADDER_WEIGHTS[1:])))
 check("ladder: runner 10%", abs(A.LADDER_RUNNER_PCT - 0.10) < 1e-12)
@@ -210,7 +211,7 @@ check("stop: ambang cakupan qty 99,9%", abs(A.QTY_COVER_TOL - 0.999) < 1e-12)
 _tm_r = {"entry": 0.004979, "sl": 0.005892}
 _legs_r = A._tp_legs_for(_tm_r, "SHORT", 1005)
 _tot_r = sum(_q for _q, _p in _legs_r)
-check("re-arm: runner tetap disisakan (<=92% qty)", len(_legs_r) == 4 and _tot_r <= 1005 * 0.92)
+check("re-arm: runner tetap disisakan (<=92% qty)", len(_legs_r) == 3 and _tot_r <= 1005 * 0.92)
 
 import src.live_trader as LT
 

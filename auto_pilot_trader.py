@@ -84,29 +84,6 @@ JOURNAL = os.getenv("JOURNAL_FILE", os.path.join(BASE_DIR, "trade_log.csv"))
 CLOSED = os.getenv("CLOSED_FILE", os.path.join(BASE_DIR, "trade_closed.csv"))
 DAILY_CAP_SEC = int(os.getenv("DAILY_CAP_SEC", "86400"))
 DAILY_MAX = int(os.getenv("MAX_DAILY_ENTRIES", "3"))
-
-REGIME_FILE = os.path.join(BASE_DIR, "regime_state.json")
-
-
-def regime_go():
-    """Entry hanya kalau exp strategi ini di 30 hari terakhir >= +0,10R.
-
-    Diukur regime_monitor.py (cron harian). Fail-closed: file hilang, basi
-    >3 hari, atau exp di bawah ambang -> entry diblokir.
-    """
-    try:
-        d = json.load(open(REGIME_FILE, encoding="utf-8"))
-        if time.time() - float(d.get("ts") or 0) > 3 * 86400:
-            log("REGIME: state basi (>3 hari), entry diblokir")
-            return False
-        ok = bool(d.get("go")) and float(d.get("exp") or -9) >= 0.10
-        if not ok:
-            log(f"REGIME NOGO: exp {d.get('exp')}R n={d.get('n')} (syarat +0,10R)")
-        return ok
-    except Exception as e:
-        log(f"REGIME: state tidak terbaca ({err_detail(e)}), entry diblokir")
-        return False
-
 RISK_USDT = float(os.getenv("RISK_USDT", "0"))  # 0 = auto compounding dari equity live
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 MIN_NOTIONAL = 5.0
@@ -133,8 +110,8 @@ MAX_SL_PCT = float(os.getenv("MAX_SL_PCT", "5.0"))
 # Dulu entry ladder dan re-arm (_tp_legs_for) masing-masing punya salinan angka
 # sendiri. Kalau satu diubah, re-arm memulihkan leg di level yang berbeda dari
 # yang benar-benar dipasang. Sekarang keduanya membaca konstanta ini.
-LADDER_LEVELS = [1.0, 1.2, 1.4, 1.7]
-LADDER_WEIGHTS = [0.26, 0.24, 0.22, 0.18]
+LADDER_LEVELS = [0.5, 1.0, 1.7]
+LADDER_WEIGHTS = [0.50, 0.25, 0.15]
 LADDER_RUNNER_PCT = 0.10          # porsi qty yang tidak dipasangi TP
 REARM_MAX_TRIES = 3               # batas percobaan re-arm per posisi
 TP_DUP_TOL = 2e-4                 # toleransi harga saat cek "order TP ini sudah ada?"
@@ -1381,10 +1358,6 @@ def scan_and_enter(t):
         log(f"Daily cap reached ({_prev}/{DAILY_MAX} untuk hari UTC {_today}; reset 00:00 UTC = 07:00 WIB). Waiting.")
         return
 
-    # --- REGIME GATE ---
-    if not regime_go():
-        return
-
     # --- SCAN CLOSED 4h BARS ---
     def _tradeable(sym, meta):
         sd = strategy.SL_ATR * meta["atr"]
@@ -1902,24 +1875,6 @@ def scan_and_enter(t):
                                   "top_depth_usdt", "notional", "fee_rt"])
                 _pw.writerow([int(time.time()), sym, side_str, _bb, _ba,
                               round(_spr, 5), round(_dep, 2), round(notional, 2), round(fee_rt, 4)])
-            # ENTRY_FEAT: fitur pra-entry untuk uji variabel pasca-checkpoint.
-            _fp = os.path.join(BASE_DIR, "entry_feat.csv")
-            _newf = not os.path.exists(_fp)
-            _hr = (time.gmtime().tm_hour + 7) % 24
-            _ses = "ASIA" if 7 <= _hr < 14 else ("EU" if 14 <= _hr < 20 else "US")
-            with open(_fp, "a", newline="") as _ff:
-                _fw = csv.writer(_ff)
-                if _newf:
-                    _fw.writerow(["ts", "symbol", "side", "ai_conf", "vol_ratio", "rsi",
-                                  "adx", "atr_pct", "sl_pct", "spread_pct", "depth_usdt",
-                                  "score", "hour_wib", "session", "notional", "risk_usd"])
-                _fw.writerow([int(time.time()), sym, side_str, round(float(ai_res.confidence), 3),
-                              round(float(meta["vol_ratio"]), 3), round(float(meta.get("rsi") or 0.0), 1),
-                              round(float(meta.get("adx") or 0.0), 1),
-                              round(meta["atr"] / price * 100, 3),
-                              round(sl_dist / price * 100, 3), round(_spr, 5), round(_dep, 2),
-                              meta.get("score", 50), _hr, _ses,
-                              round(notional, 2), round(risk_real, 3)])
             log(f"MAKER PROBE {sym}: spread {_spr:.3f}% top depth ${_dep:.0f} vs fee taker ${fee_rt:.4f}")
         except Exception as _mpe:
             log(f"MAKER PROBE skip {sym}: {err_detail(_mpe)}")
