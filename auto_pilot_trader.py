@@ -2109,6 +2109,44 @@ def maker_shadow(t):
     log(f"MAKER SHADOW: {hit_n}/{len(out)} limit sentuh kena (kumulatif {len(done) + len(out)})")
 
 
+def foreign_positions(t, st):
+    """Posisi terbuka di akun yang tidak tercatat di active_trades bot ini."""
+    try:
+        known = set((st.get("active_trades") or {}).keys())
+        out = []
+        for p in get_open_positions(t) or []:
+            sym = p.get("symbol")
+            if sym and sym not in known:
+                out.append((sym, p.get("side"), float(p.get("contracts") or 0)))
+        return out
+    except Exception as e:
+        log("foreign check gagal: %s" % str(e)[:120])
+        return []
+
+
+def _foreign_alert(items):
+    """Alert posisi asing, maksimal 1x/jam."""
+    try:
+        import json as _json
+        fp = "/tmp/.foreign_alert.json"
+        now = time.time()
+        try:
+            last = float((_json.load(open(fp)) or {}).get("ts") or 0)
+        except Exception:
+            last = 0.0
+        if now - last < 3600:
+            return
+        body = "\n".join("• %s %s qty %s" % (s, sd, q) for s, sd, q in items[:5])
+        TelegramNotifier().send_message(
+            "⚠️ <b>POSISI ASING TERDETEKSI</b>\n" + body +
+            "\n\nTidak ada di state bot. Kemungkinan instance lain pakai API key sama.\n"
+            "Entry bot DIHENTIKAN sampai posisi ini hilang."
+        )
+        _json.dump({"ts": now}, open(fp, "w"))
+    except Exception:
+        pass
+
+
 def run():
     with contextlib.redirect_stdout(sys.stderr):
         t = BinanceFuturesTrader(is_testnet=False)
@@ -2122,6 +2160,15 @@ def run():
     news_heads_up(t)
     # Check open positions count vs limit
     open_pos = get_open_positions(t)
+
+    # Guard posisi asing: satu akun = satu sistem. Kalau ada posisi yang bukan
+    # milik bot, entry dihentikan siklus ini (bukan ditutup) + alert.
+    _fp_items = foreign_positions(t, st) if str(os.getenv("FOREIGN_GUARD", "1")).strip() != "0" else []
+    if _fp_items:
+        log("FOREIGN POSITION: %s - entry dihentikan" % ", ".join(x[0] for x in _fp_items))
+        _foreign_alert(_fp_items)
+        return
+
     if len(open_pos) < MAX_OPEN_POSITIONS:
         if os.getenv("ENTRY_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
             scan_and_enter(t)
