@@ -2048,11 +2048,29 @@ def main():
         import traceback
         log(f"FATAL {type(e).__name__}: {e}")
         print(traceback.format_exc()[-800:], file=sys.stderr, flush=True)
+        # Throttle: error yang sama maksimal 1 alert/jam. 172 alert -2015
+        # dalam 9 hari membuat bot di-mute, jadi kegagalan justru tak terlihat.
         try:
-            TelegramNotifier().send_message(
-                f"❌ <b>BOT ERROR</b>\n<code>{type(e).__name__}: {str(e)[:200]}</code>\n"
-                f"Run berikutnya otomatis coba lagi."
-            )
+            import json as _json
+            _fp = "/tmp/.fatal_alert.json"
+            _key = f"{type(e).__name__}:{str(e)[:60]}"
+            _now = time.time()
+            _last = {}
+            try:
+                _last = _json.load(open(_fp)) or {}
+            except Exception:
+                _last = {}
+            _prev = _last.get(_key) or 0
+            if _now - float(_prev) >= 3600:
+                TelegramNotifier().send_message(
+                    f"❌ <b>BOT ERROR</b>\n<code>{type(e).__name__}: {str(e)[:200]}</code>\n"
+                    f"Run berikutnya otomatis coba lagi. (alert sama dimute 1 jam)"
+                )
+                _last[_key] = _now
+                _last = {k: v for k, v in _last.items() if _now - float(v) < 86400}
+                _json.dump(_last, open(_fp, "w"))
+            else:
+                log(f"FATAL ALERT THROTTLED ({int((3600 - (_now - float(_prev))) / 60)} menit lagi)")
         except Exception:
             pass
         sys.exit(1)
