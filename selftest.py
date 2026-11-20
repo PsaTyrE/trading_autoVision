@@ -347,6 +347,28 @@ check("rank surge: perilaku lama tetap bisa dipanggil (rollback)",
 
 A.SCAN_RANK_MODE = _rk_old
 
+# --- 23. momentum sleeve (aturan #5) ---
+try:
+    import numpy as _np
+    import pandas as _pd
+    _n = 160
+    _cl = _np.linspace(100, 160, _n)
+    _df = _pd.DataFrame({"t": range(_n), "o": _cl, "h": _cl * 1.005,
+                         "l": _cl * 0.995, "c": _cl, "v": _np.full(_n, 1000.0)})
+    check("adx14 tren naik kuat > 25", float(A.adx14(_df).iloc[-2]) > 25.0)
+    _flat = _pd.DataFrame({"t": range(_n), "o": 100.0, "h": 100.2,
+                           "l": 99.8, "c": 100.0, "v": _np.full(_n, 1000.0)})
+    check("adx14 pasar datar < 25", float(A.adx14(_flat).iloc[-2]) < 25.0)
+    os.environ["MOM_SLEEVE"] = "0"
+    check("sleeve mati via MOM_SLEEVE=0",
+          A.momentum_candidates(None, [], set(), {}) == [])
+    os.environ.pop("MOM_SLEEVE", None)
+    check("sleeve tidak dobel: sudah ada posisi MOM",
+          A.momentum_candidates(None, [], set(),
+                                {"active_trades": {"X": {"sleeve": "MOM"}}}) == [])
+except Exception as _e:
+    check("momentum sleeve check bisa jalan: %s" % _e, False)
+
 try:
     os.remove(A.STATE_FILE)
 except Exception:

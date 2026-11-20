@@ -1289,6 +1289,74 @@ def sl_width_ok(price, sl_dist):
     return p <= MAX_SL_PCT
 
 
+def adx14(d, n: int = 14):
+    """ADX Wilder sederhana dari DataFrame berkolom h/l/c."""
+    up = d.h.diff()
+    dn = -d.l.diff()
+    pdm = ((up > dn) & (up > 0)) * up
+    mdm = ((dn > up) & (dn > 0)) * dn
+    tr = pd.concat(
+        [d.h - d.l, (d.h - d.c.shift()).abs(), (d.l - d.c.shift()).abs()], axis=1
+    ).max(axis=1)
+    atr = tr.rolling(n).mean()
+    pdi = 100 * pdm.rolling(n).mean() / atr
+    mdi = 100 * mdm.rolling(n).mean() / atr
+    dx = 100 * (pdi - mdi).abs() / (pdi + mdi).replace(0, 1e-9)
+    return dx.rolling(n).mean()
+
+
+def momentum_candidates(t, universe, occupied, st):
+    """Sleeve momentum: breakout 20-bar high 4h, maks 1 posisi, risk 1%.
+
+    Syarat: close > high 20 bar sebelumnya, RSI 55-70 (bukan jenuh), ADX >= 25,
+    volume >= 1,5x rata-rata 20 bar. Dinilai terpisah dari mesin pullback:
+    posisi ditandai sleeve=MOM, statistik tidak boleh dicampur.
+    """
+    if str(os.getenv("MOM_SLEEVE", "1")).strip() == "0":
+        return []
+    at = st.get("active_trades") or {}
+    if any((v or {}).get("sleeve") == "MOM" for v in at.values()):
+        return []
+    out = []
+    for sym in universe:
+        if sym in occupied:
+            continue
+        try:
+            with contextlib.redirect_stdout(sys.stderr):
+                raw = t.exchange.fetch_ohlcv(sym, timeframe="4h", limit=320)
+            if len(raw) < strategy.MIN_BARS:
+                continue
+            d = strategy.features(pd.DataFrame(raw, columns=["t", "o", "h", "l", "c", "v"]))
+            i = -2
+            c = float(d.c.iloc[i])
+            hh = float(d.hh.iloc[i])
+            rsi = float(d.rsi.iloc[i])
+            vma = float(d.vma.iloc[i])
+            vr = (float(d.v.iloc[i]) / vma) if vma > 0 else 0.0
+            ax = float(adx14(d).iloc[i])
+            if not (c > hh and 55.0 <= rsi <= 70.0 and vr >= 1.5 and ax >= 25.0):
+                continue
+            meta = {
+                "close": c,
+                "atr": float(d.atr.iloc[i]),
+                "bar_ts": int(d.t.iloc[i]),
+                "vol_ratio": vr,
+                "rsi": rsi,
+                "ema50": float(d.ema50.iloc[i]),
+                "adx": ax,
+                "sleeve": "MOM",
+                "risk_mult": 0.5,
+                "tf": "4h",
+            }
+            out.append((sym, "BUY", meta, vr))
+            log("MOM SETUP %s: breakout 20-bar high rsi %.1f adx %.1f volr %.2fx" % (sym, rsi, ax, vr))
+        except Exception as e:
+            log("MOM scan %s: %s" % (sym, str(e)[:100]))
+            continue
+    out.sort(key=lambda x: -x[3])
+    return out[:1]
+
+
 def scan_and_enter(t):
     """COMPRESSION BREAKOUT v2 - Multi-position with Correlation Guard."""
     # --- NEWS GUARD ---
@@ -1493,6 +1561,16 @@ def scan_and_enter(t):
 
     # Rank candidates: pita volume surge (band) atau surge terbesar (surge)
     candidates = rank_candidates(candidates)
+
+    # Sleeve momentum: kandidat breakout ditambahkan SETELAH pullback agar
+    # slot selalu didahulukan mesin yang sudah terbukti.
+    try:
+        _mom = momentum_candidates(t, _universe, occupied_symbols, st)
+        if _mom:
+            log("MOMENTUM: %d kandidat breakout masuk antrean" % len(_mom))
+            candidates = candidates + _mom
+    except Exception as _me:
+        log("MOMENTUM scan gagal: %s" % str(_me)[:120])
 
     # Process candidates up to available slots with Correlation Guard
     entered_count = 0
@@ -1860,7 +1938,8 @@ def scan_and_enter(t):
             "symbol": sym, "side": side_str, "entry": fill, "qty": qty,
             "sl": sl_price, "tp1": tp1_price, "tp2": tp2_price,
             "tp_legs": _legs_rec, "tp_failed": _legs_fail_rec,
-            "cluster": cluster, "ts": int(time.time()), "risk": round(risk_real, 4), "cfg": CFG_TAG
+            "cluster": cluster, "ts": int(time.time()), "risk": round(risk_real, 4),
+            "cfg": CFG_TAG, "sleeve": str(meta.get("sleeve") or "PULLBACK")
         }
 
         at_dict = st.get("active_trades") or {}

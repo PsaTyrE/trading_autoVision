@@ -389,3 +389,23 @@ bertag v3 vs tag sebelumnya (v2 = ladder 0,5R + time stop).
 
 **Risiko yang diterima.** Tiga perubahan sekaligus melemahkan atribusi; tag
 CFG hanya memisahkan terhadap versi lama, bukan memisahkan efek antar ketiganya.
+
+---
+
+## Pre-register #5 - momentum sleeve terpisah (2026-11-20, sebelum hasil diketahui)
+
+**Aturan:** BUY hanya bila close 4h > high 20 bar sebelumnya, RSI 55-70,
+ADX14 >= 25, volume >= 1,5x rata-rata 20 bar. Risk 1% (risk_mult 0,5),
+maksimal 1 posisi sleeve, dan hanya memakai slot yang tidak dipakai pullback.
+Posisi ditandai `sleeve=MOM` di `active_trades`; statistik dipisah total.
+
+**Kenapa dipisah:** mesin pullback tidak akan pernah menangkap koin yang lari
+(EVAA +78% ditolak anti-pucuk). Kalau dicampur, edge pullback yang sudah
+terbukti (+0,18R) jadi tidak terbaca.
+
+**Evaluasi 20 trade sleeve:**
+- Lulus: expectancy >= +0,05R -> risk naik ke 2%.
+- Gagal: expectancy < 0 -> MOM_SLEEVE=0 permanen.
+- Netral (0..+0,05R): tetap 1%, lanjut 20 trade lagi.
+
+**Rollback instan:** `MOM_SLEEVE=0` di `.env`, tanpa ubah kode.
