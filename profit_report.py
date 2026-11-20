@@ -108,6 +108,9 @@ def main():
         for r in csv.DictReader(open("trade_closed.csv", encoding="utf-8")):
             try:
                 R = float(r["R"])
+                # ADOPT dengan SL nyaris nol bikin R ratusan; bukan sampel nyata.
+                if abs(R) > 5 or 0 <= float(r.get("risk") or 0) < 0.05:
+                    continue
             except Exception:
                 continue
             n_close += 1
@@ -180,6 +183,9 @@ def main():
         for r in csv.DictReader(open("trade_closed.csv", encoding="utf-8")):
             try:
                 R = float(r["R"])
+                # ADOPT dengan SL nyaris nol bikin R ratusan; bukan sampel nyata.
+                if abs(R) > 5 or 0 <= float(r.get("risk") or 0) < 0.05:
+                    continue
             except Exception:
                 continue
             try:
