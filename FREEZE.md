@@ -365,3 +365,27 @@ berputar. Jadi ini eksperimen efisiensi, bukan klaim edge.
 **Risiko yang diterima.** Sebagian trade datar memang baru bergerak di hari
 kedua. Time stop memotong potensi itu. Karena itu kegagalan diukur dari harga
 SETELAH penutupan, bukan dari perasaan.
+
+---
+
+## Pre-register #4 - paket v3: universe $40M/top-40 + risk setengah di entry ke-3
+## + runner trail 0,5R sejak 1,0R (2026-11-20, sebelum hasil diketahui)
+
+**Perubahan (satu paket, ditandai CFG_TAG=v3-2026-11-20 di trade_meta & log):**
+1. SCAN_MIN_VOL_USDT 20jt -> 40jt; SCAN_PRE_RANK 50 -> 40. Alasan: scratch
+   terkonsentrasi di koin tipis; slippage/spread memakan edge di bawah $40jt.
+2. Entry ke-3 dalam sehari (ordinal >= 3) memakai setengah risk (1% bukan 2%).
+3. runner_trail_sl: jarak 0,75R -> 0,5R, dan mulai aktif di 1,0R (bukan 2,0R).
+
+**Kenapa digabung.** Atas permintaan operator: jalankan seluruh paket. Untuk
+menjaga atribusi, setiap entry diberi CFG_TAG. Evaluasi membandingkan entry
+bertag v3 vs tag sebelumnya (v2 = ladder 0,5R + time stop).
+
+**Metrik keberhasilan (20 close baru, dihitung hanya trade CFG v3):**
+- Lulus: expectancy >= +0,05R DAN frekuensi entry tidak turun >50%.
+- Gagal: expectancy < +0,02R -> universe dikembalikan ke 20jt/50 dan
+  runner trail dikembalikan ke 0,75R/2,0R. Risk setengah entry ke-3 tetap
+  (tidak terkait hasil, itu manajemen risiko).
+
+**Risiko yang diterima.** Tiga perubahan sekaligus melemahkan atribusi; tag
+CFG hanya memisahkan terhadap versi lama, bukan memisahkan efek antar ketiganya.

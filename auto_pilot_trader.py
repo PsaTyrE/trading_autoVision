@@ -115,6 +115,7 @@ LADDER_WEIGHTS = [0.50, 0.25, 0.15]
 LADDER_RUNNER_PCT = 0.10          # porsi qty yang tidak dipasangi TP
 TIME_STOP_H = float(os.getenv("TIME_STOP_H", "24"))  # jam; 0 = mati
 TIME_STOP_MIN_R = 0.5             # wajib pernah sentuh 0,5R sebelum batas ini
+CFG_TAG = "v3-2026-11-20"           # penanda paket aturan; dipakai saat evaluasi
 REARM_MAX_TRIES = 3               # batas percobaan re-arm per posisi
 TP_DUP_TOL = 2e-4                 # toleransi harga saat cek "order TP ini sudah ada?"
 NEWS_TAG_TITLE_WINDOW_MIN = 180   # judul berita cuma ditempel kalau |menit| <= ini
@@ -234,7 +235,7 @@ def trail_lock_sl(side, entry, price, r_dist, dec=4):
     if lock == 0.0:
         lv = entry * 1.001 if side == "LONG" else entry * QTY_COVER_TOL
     out = round(lv, dec)
-    if g >= 2.0:
+    if g >= 1.0:
         rt = runner_trail_sl(side, price, r_dist, dec)
         if rt is not None:
             out = max(out, rt) if side == "LONG" else min(out, rt)
@@ -249,7 +250,7 @@ def runner_trail_sl(side, price, r_dist, dec=4):
         return None
     if r_dist <= 0:
         return None
-    off = r_dist * 0.75
+    off = r_dist * 0.5
     return round(price - off, dec) if side == "LONG" else round(price + off, dec)
 
 
@@ -309,15 +310,18 @@ def daily_loss_blocked(realized: float, equity: float, pct: float = 0.05) -> boo
         return False
 
 
-def risk_budget(equity: float) -> float:
-    """Besar risiko (USDT) per trade, dihitung proporsional dari equity live."""
+def risk_budget(equity: float, frac: float = 1.0) -> float:
+    """Besar risiko (USDT) per trade, dihitung proporsional dari equity live.
+
+    frac: pengali untuk entry yang kualitasnya lebih rendah (entry ke-3 = 0,5).
+    """
     eq = float(equity or 0.0)
     pct = RISK_TIERS[0][1]
     for thr, p in RISK_TIERS:
         if eq >= thr:
             pct = p
     pct = min(pct, RISK_PCT_CAP)
-    amt = round(eq * pct, 2)
+    amt = round(eq * pct * max(0.1, min(1.0, float(frac))), 2)
     if RISK_USDT > 0:
         amt = min(amt, RISK_USDT)
     return max(0.30, amt)
@@ -1512,7 +1516,13 @@ def scan_and_enter(t):
             continue
 
         try:
-            dyn_risk = round(risk_budget(equity) * float(meta.get("risk_mult", 1.0)), 2)
+            # Entry ke-3 dalam sehari = kandidat sisa, kualitas paling rendah.
+            # Setengah risk: tetap dapat exposure, tidak merusak hari kalau salah.
+            _ord = _prev + entered_count
+            _frac = 0.5 if _ord >= 2 else 1.0
+            dyn_risk = round(risk_budget(equity, _frac) * float(meta.get("risk_mult", 1.0)), 2)
+            if _frac < 1.0:
+                log(f"RISK HALF {sym}: entry ke-{_ord + 1} hari ini -> risk ${dyn_risk}")
             qty = float(t.exchange.amount_to_precision(resolved, dyn_risk / sl_dist))
         except Exception as e:
             log(f"Skip {sym}: qty precision ({e})")
@@ -1850,7 +1860,7 @@ def scan_and_enter(t):
             "symbol": sym, "side": side_str, "entry": fill, "qty": qty,
             "sl": sl_price, "tp1": tp1_price, "tp2": tp2_price,
             "tp_legs": _legs_rec, "tp_failed": _legs_fail_rec,
-            "cluster": cluster, "ts": int(time.time()), "risk": round(risk_real, 4)
+            "cluster": cluster, "ts": int(time.time()), "risk": round(risk_real, 4), "cfg": CFG_TAG
         }
 
         at_dict = st.get("active_trades") or {}
@@ -1883,7 +1893,7 @@ def scan_and_enter(t):
         except Exception as je:
             log(f"Journal error: {je}")
 
-        log(f"ENTRY {sym} {side_str} qty={qty} @ {fill} notional=${notional:.2f} SL={sl_price} TP1={tp1_price} TP2={tp2_price} risk=${risk_real:.2f} fee_rt=${fee_rt:.4f}")
+        log(f"CFG {CFG_TAG} ENTRY {sym} {side_str} qty={qty} @ {fill} notional=${notional:.2f} SL={sl_price} TP1={tp1_price} TP2={tp2_price} risk=${risk_real:.2f} fee_rt=${fee_rt:.4f}")
 
         # MAKER_PROBE: ukur spread + kedalaman top-of-book tiap entry. Dasar
         # keputusan pindah ke limit/maker (fee sekarang 13% gross edge).

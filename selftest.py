@@ -122,8 +122,8 @@ check("tp passed LONG 1.30 vs 1.35", A.tp_leg_passed("LONG", 1.30, 1.35) is True
 check("tp belum LONG 1.40 vs 1.35", A.tp_leg_passed("LONG", 1.40, 1.35) is False)
 
 # --- 13. runner trailing 0.75R ---
-check("runner trail SHORT 1.2381 r0.0203", A.runner_trail_sl("SHORT", 1.2381, 0.0203, 4) == 1.2533)
-check("runner trail LONG 100 r2", A.runner_trail_sl("LONG", 100.0, 2.0, 2) == 98.5)
+check("runner trail SHORT 1.2381 r0.0203 (jarak 0,5R)", A.runner_trail_sl("SHORT", 1.2381, 0.0203, 4) == 1.2483)
+check("runner trail LONG 100 r2 (jarak 0,5R)", A.runner_trail_sl("LONG", 100.0, 2.0, 2) == 99.0)
 check("runner trail r_dist 0 -> None", A.runner_trail_sl("LONG", 100.0, 0.0) is None)
 
 # --- 14. err_detail tidak boleh motong pesan ---
@@ -141,9 +141,9 @@ check("err_detail baca code", "code=-4164" in A.err_detail(_FE("x")))
 _e, _r = 0.04508, 0.01528   # Q: entry, 1R dalam harga
 check("gain 0.5R belum kunci", A.trail_lock_sl("SHORT", _e, _e - 0.5*_r, _r) is None)
 check("gain 0.8R -> BE", A.trail_lock_sl("SHORT", _e, _e - 0.85*_r, _r) == 0.045)
-check("gain 1.0R -> 0.4R", A.trail_lock_sl("SHORT", _e, _e - 1.1*_r, _r) == 0.0390)
-check("gain 1.5R -> 0.8R", A.trail_lock_sl("SHORT", _e, _e - 1.6*_r, _r) == 0.0329)
-check("gain 2.0R -> 1.2R", A.trail_lock_sl("SHORT", _e, _e - 2.1*_r, _r) == 0.0245)
+check("gain 1.1R -> runner 0,5R ikut (0,4R vs runner, ambil ketat)", A.trail_lock_sl("SHORT", _e, _e - 1.1*_r, _r) == 0.0359)
+check("gain 1.6R -> runner lebih ketat dari 0,8R", A.trail_lock_sl("SHORT", _e, _e - 1.6*_r, _r) == 0.0283)
+check("gain 2.1R -> runner lebih ketat dari 1,2R", A.trail_lock_sl("SHORT", _e, _e - 2.1*_r, _r) == 0.0206)
 check("gain 3.0R -> 1.5R+", A.trail_lock_sl("SHORT", _e, _e - 3.2*_r, _r) <= 0.0222)
 check("LONG 0.8R -> BE", A.trail_lock_sl("LONG", 100.0, 108.0, 10.0) == 100.1)
 check("r_dist 0 -> None", A.trail_lock_sl("LONG", 100.0, 120.0, 0.0) is None)
