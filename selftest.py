@@ -122,8 +122,8 @@ check("tp passed LONG 1.30 vs 1.35", A.tp_leg_passed("LONG", 1.30, 1.35) is True
 check("tp belum LONG 1.40 vs 1.35", A.tp_leg_passed("LONG", 1.40, 1.35) is False)
 
 # --- 13. runner trailing 0.75R ---
-check("runner trail SHORT 1.2381 r0.0203", A.runner_trail_sl("SHORT", 1.2381, 0.0203, 4) == 1.2533)
-check("runner trail LONG 100 r2", A.runner_trail_sl("LONG", 100.0, 2.0, 2) == 98.5)
+check("runner trail SHORT 1.2381 r0.0203 (jarak 0,5R)", A.runner_trail_sl("SHORT", 1.2381, 0.0203, 4) == 1.2483)
+check("runner trail LONG 100 r2 (jarak 0,5R)", A.runner_trail_sl("LONG", 100.0, 2.0, 2) == 99.0)
 check("runner trail r_dist 0 -> None", A.runner_trail_sl("LONG", 100.0, 0.0) is None)
 
 # --- 14. err_detail tidak boleh motong pesan ---
@@ -141,9 +141,9 @@ check("err_detail baca code", "code=-4164" in A.err_detail(_FE("x")))
 _e, _r = 0.04508, 0.01528   # Q: entry, 1R dalam harga
 check("gain 0.5R belum kunci", A.trail_lock_sl("SHORT", _e, _e - 0.5*_r, _r) is None)
 check("gain 0.8R -> BE", A.trail_lock_sl("SHORT", _e, _e - 0.85*_r, _r) == 0.045)
-check("gain 1.0R -> 0.4R", A.trail_lock_sl("SHORT", _e, _e - 1.1*_r, _r) == 0.0390)
-check("gain 1.5R -> 0.8R", A.trail_lock_sl("SHORT", _e, _e - 1.6*_r, _r) == 0.0329)
-check("gain 2.0R -> 1.2R", A.trail_lock_sl("SHORT", _e, _e - 2.1*_r, _r) == 0.0245)
+check("gain 1.1R -> runner 0,5R ikut (0,4R vs runner, ambil ketat)", A.trail_lock_sl("SHORT", _e, _e - 1.1*_r, _r) == 0.0359)
+check("gain 1.6R -> runner lebih ketat dari 0,8R", A.trail_lock_sl("SHORT", _e, _e - 1.6*_r, _r) == 0.0283)
+check("gain 2.1R -> runner lebih ketat dari 1,2R", A.trail_lock_sl("SHORT", _e, _e - 2.1*_r, _r) == 0.0206)
 check("gain 3.0R -> 1.5R+", A.trail_lock_sl("SHORT", _e, _e - 3.2*_r, _r) <= 0.0222)
 check("LONG 0.8R -> BE", A.trail_lock_sl("LONG", 100.0, 108.0, 10.0) == 100.1)
 check("r_dist 0 -> None", A.trail_lock_sl("LONG", 100.0, 120.0, 0.0) is None)
@@ -186,16 +186,17 @@ check("re-arm pakai tp_legs kalau ada",
 
 _tm_old = {"entry": 0.004979, "sl": 0.005892, "tp1": 0.004066, "tp2": 0.003152}
 _legs_old = A._tp_legs_for(_tm_old, "SHORT", 1005)
-check("re-arm rekonstruksi 1,0/1,2/1,4/1,7R (bukan 2R level strategi)",
-      len(_legs_old) == 4 and abs(_legs_old[1][1] - 0.003883) < 1e-6
+check("re-arm rekonstruksi 0,5/1,0/1,7R (bukan 2R level strategi)",
+      len(_legs_old) == 3 and abs(_legs_old[1][1] - 0.004066) < 1e-6
+      and abs(_legs_old[0][1] - 0.0045225) < 1e-6
       and all(abs(_p - 0.003152) > 1e-6 for _q, _p in _legs_old))
 
 check("re-arm tanpa info entry/SL -> tidak memasang apa pun",
       A._tp_legs_for({"entry": 0, "sl": 0}, "SHORT", 10) == [])
 
 # --- 21. hardcode cleanup: konstanta tunggal + stop param --------------------
-check("ladder: levels satu sumber kebenaran", A.LADDER_LEVELS == [1.0, 1.2, 1.4, 1.7])
-check("ladder: bobot 0,26/0,24/0,22/0,18 (jumlah 0,90)",
+check("ladder: levels satu sumber kebenaran", A.LADDER_LEVELS == [0.5, 1.0, 1.7])
+check("ladder: bobot 0,50/0,25/0,15 (jumlah 0,90)",
       abs(sum(A.LADDER_WEIGHTS) - 0.90) < 1e-9
       and all(b < a for a, b in zip(A.LADDER_WEIGHTS, A.LADDER_WEIGHTS[1:])))
 check("ladder: runner 10%", abs(A.LADDER_RUNNER_PCT - 0.10) < 1e-12)
@@ -210,7 +211,7 @@ check("stop: ambang cakupan qty 99,9%", abs(A.QTY_COVER_TOL - 0.999) < 1e-12)
 _tm_r = {"entry": 0.004979, "sl": 0.005892}
 _legs_r = A._tp_legs_for(_tm_r, "SHORT", 1005)
 _tot_r = sum(_q for _q, _p in _legs_r)
-check("re-arm: runner tetap disisakan (<=92% qty)", len(_legs_r) == 4 and _tot_r <= 1005 * 0.92)
+check("re-arm: runner tetap disisakan (<=92% qty)", len(_legs_r) == 3 and _tot_r <= 1005 * 0.92)
 
 import src.live_trader as LT
 
@@ -345,6 +346,28 @@ check("rank surge: perilaku lama tetap bisa dipanggil (rollback)",
       [c[0] for c in _r] == ["B/USDT:USDT", "C/USDT:USDT", "A/USDT:USDT"])
 
 A.SCAN_RANK_MODE = _rk_old
+
+# --- 23. momentum sleeve (aturan #5) ---
+try:
+    import numpy as _np
+    import pandas as _pd
+    _n = 160
+    _cl = _np.linspace(100, 160, _n)
+    _df = _pd.DataFrame({"t": range(_n), "o": _cl, "h": _cl * 1.005,
+                         "l": _cl * 0.995, "c": _cl, "v": _np.full(_n, 1000.0)})
+    check("adx14 tren naik kuat > 25", float(A.adx14(_df).iloc[-2]) > 25.0)
+    _flat = _pd.DataFrame({"t": range(_n), "o": 100.0, "h": 100.2,
+                           "l": 99.8, "c": 100.0, "v": _np.full(_n, 1000.0)})
+    check("adx14 pasar datar < 25", float(A.adx14(_flat).iloc[-2]) < 25.0)
+    os.environ["MOM_SLEEVE"] = "0"
+    check("sleeve mati via MOM_SLEEVE=0",
+          A.momentum_candidates(None, [], set(), {}) == [])
+    os.environ.pop("MOM_SLEEVE", None)
+    check("sleeve tidak dobel: sudah ada posisi MOM",
+          A.momentum_candidates(None, [], set(),
+                                {"active_trades": {"X": {"sleeve": "MOM"}}}) == [])
+except Exception as _e:
+    check("momentum sleeve check bisa jalan: %s" % _e, False)
 
 try:
     os.remove(A.STATE_FILE)

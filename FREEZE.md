@@ -309,222 +309,103 @@ dan angka bulat, BUKAN optimum statistik (1,36) supaya tidak curve-fitting.
 **Konsekuensi yang diterima:** frekuensi entry turun (13 dari 37 historis akan ditolak, ~35%),
 jadi profit lebih lambat per kalender, ditukar dengan kualitas entry.
 
+---
+
+## Pre-register #2 - TP1 di 0,5R (2026-11-20, sebelum hasil diketahui)
+
+**Hipotesis.** Ladder lama menaruh leg pertama di 1,0R. Data MFE 29 trade:
+76% trade pernah menyentuh 0,5R, hanya 24% menyentuh 1,0R, ~7% menyentuh 1,7R.
+Artinya mayoritas trade memberi profit yang tidak pernah direalisasi, lalu
+berbalik jadi scratch atau loss. Memindahkan leg pertama ke 0,5R seharusnya
+mengubah profit kertas itu jadi realized.
+
+**Perubahan.** LADDER_LEVELS 1,0/1,2/1,4/1,7 -> 0,5/1,0/1,7.
+LADDER_WEIGHTS 26/24/22/18% -> 50/25/15%, runner tetap 10%.
+Fallback qty kecil otomatis ikut (pakai LADDER_LEVELS[0] = 0,5R).
+
+**Estimasi sebelum jalan** (dihitung dari distribusi MFE, bukan dari hasil):
+leg 1: 0,76 x 0,50 x 0,5R = +0,190R; leg 2: 0,24 x 0,25 x 1,0R = +0,060R;
+leg 3: 0,07 x 0,15 x 1,7R = +0,018R; total ~+0,27R bruto dari TP,
+vs ladder lama ~+0,18R. Selisih yang diharapkan ~+0,09R per trade.
+Bila benar, exp naik dari +0,02R (bursa, 30 hari) ke ~+0,10R.
+
+**Metrik keberhasilan (dinilai setelah 20 close baru):**
+- Lulus: expectancy >= +0,05R DAN rata-rata win tidak turun >20%.
+- Gagal: expectancy < +0,02R atau win rate < 45% -> rollback ke
+  1,0/1,2/1,4/1,7 dan 26/24/22/18, ditulis di sini bahwa gagal.
+
+**Risiko yang diterima.** 24% trade yang dulu bisa jalan ke 1R+ kini separuh
+posisinya keluar di 0,5R. Kalau distribusi MFE bergeser (pasar trending kuat),
+perubahan ini merugikan - itu sebabnya dinilai di 20 close, bukan selamanya.
 
 ---
 
-## Pre-registrasi 2026-11-12: slippage stop-market (BELUM diubah)
+## Pre-register #3 - TIME STOP 24 jam (2026-11-20, sebelum hasil diketahui)
 
-**Pemicu:** 12 Nov 2026 dua loss lewat 1R di token saham —
-SKHYNIX -1,02R (slip -1,55%), EWY -1,14R (slip -0,89%). Total bocor 0,26R dari eksekusi.
+**Hipotesis.** 12 dari 50 close (24%) keluar nyaris nol (|net| < $0,05) = trade
+datar yang menghabiskan slot. Dengan MAX_OPEN_POSITIONS=3 dan ~1,7 entry/hari,
+slot yang nyangkut menolak sinyal yang lebih baik.
 
-**Data yang membantah dugaan awal:** kedalaman top-of-book saat entry justru cukup
-(SKHYNIX $7.638, EWY $3.138, DRAM $28.610). Jadi penyebabnya bukan buku tipis,
-tapi harga lompat melewati stop (gap), bukan ketiadaan lawan transaksi.
+**Perubahan.** Posisi yang umurnya >= 24 jam DAN MFE-nya belum pernah mencapai
+0,5R ditutup di pasar. Posisi yang sudah pernah menyentuh 0,5R tidak disentuh
+(trailing/ladder yang mengurus). Konstanta: TIME_STOP_H=24, TIME_STOP_MIN_R=0,5.
 
-**Aturan yang dipra-registrasi (diputuskan SEBELUM data berikutnya ada):**
-- Diukur: rata-rata `slip_pct` dari `slippage.csv` pada 10 close berikutnya (13 Nov - selesai checkpoint).
-- Ambang: rata-rata slip <= 0,15R -> tidak ada perubahan (stop-market dipertahankan).
-- Ambang: rata-rata slip > 0,15R -> stop diganti `STOP` limit dengan buffer 0,5% dari trigger
-  (batas rugi terkunci, risiko tidak terisi saat gap diterima sadar).
-- Yang TIDAK dilakukan: melarang token saham. Tiga trade token saham terbaik
-  (ANTHROPIC +0,60/+0,66, MSTR +1,11, CRCL +1,17) justru dari kelas yang sama,
-  jadi larangan itu akan memotong edge yang sudah terbukti.
+**Estimasi sebelum jalan.** Tidak ada klaim kenaikan exp. Yang diukur: berapa
+scratch yang tercipta vs berapa win yang hilang karena dipotong di 24 jam.
+Kalau trade datar 24 jam punya peluang sama besar jadi win atau loss (koin
+acak), memotongnya tidak mengubah exp - yang berubah hanya kecepatan modal
+berputar. Jadi ini eksperimen efisiensi, bukan klaim edge.
 
-**Status:** nol perubahan parameter. Parameter tetap beku sampai checkpoint 20 close.
+**Metrik keberhasilan (dinilai setelah 20 close baru):**
+- Lulus: jumlah close/hari naik >= 20% DAN exp tidak turun (>= +0,02R).
+- Gagal: exp turun di bawah +0,02R atau ada >= 3 trade yang ditutup time-stop
+  lalu harga bergerak >= 1R ke arah posisi dalam 24 jam berikutnya -> matikan
+  (TIME_STOP_H=0).
 
-
----
-
-## Mandat 2026-11-13: kewenangan tutup posisi
-
-User menyerahkan keputusan tutup posisi ke assistant. Supaya tidak jadi intervensi
-liar yang merusak pengukuran, kewenangan itu dibatasi tiga pemicu saja:
-
-1. **Stop hilang di exchange** - posisi tanpa order proteksi (dikonfirmasi 2x baca).
-   Tindakan: flatten seketika. Ini kegagalan proteksi, bukan keputusan trading.
-2. **Dead money** - posisi terbuka >24 jam dengan |R| < 0,20 DAN tren bar 4h sudah
-   berbalik melawan posisi. Tindakan: tutup di harga pasar.
-3. **TP/SL tersentuh** - ditangani bot, bukan intervensi.
-
-Yang **tidak** dibenarkan: menutup posisi merah cuma karena takut, menutup posisi
-hijau sebelum TP karena ingin mengunci, atau menutup karena berita. Semua itu
-menambah variabel dan membuat exp/R tidak lagi mencerminkan strategi.
-
-Setiap close manual wajib dicatat alasannya (pemicu 1/2/3) supaya bisa diaudit
-dan dikeluarkan dari statistik strategi kalau perlu.
-
+**Risiko yang diterima.** Sebagian trade datar memang baru bergerak di hari
+kedua. Time stop memotong potensi itu. Karena itu kegagalan diukur dari harga
+SETELAH penutupan, bukan dari perasaan.
 
 ---
 
-## Target 2026-11-14: equity $100 pada 2027-02-14 (90 hari)
+## Pre-register #4 - paket v3: universe $40M/top-40 + risk setengah di entry ke-3
+## + runner trail 0,5R sejak 1,0R (2026-11-20, sebelum hasil diketahui)
 
-**Titik awal:** equity $59,67. Target $100 = +67,6% dalam 90 hari = **+0,574%/hari**.
-Baseline sekarang 0,26%/hari (risk 2%, exp 0,103R, ~2,5 close/hari). Butuh ~2,2x.
+**Perubahan (satu paket, ditandai CFG_TAG=v3-2026-11-20 di trade_meta & log):**
+1. SCAN_MIN_VOL_USDT 20jt -> 40jt; SCAN_PRE_RANK 50 -> 40. Alasan: scratch
+   terkonsentrasi di koin tipis; slippage/spread memakan edge di bawah $40jt.
+2. Entry ke-3 dalam sehari (ordinal >= 3) memakai setengah risk (1% bukan 2%).
+3. runner_trail_sl: jarak 0,75R -> 0,5R, dan mulai aktif di 1,0R (bukan 2,0R).
 
-**Syarat matematis yang harus dipenuhi bersamaan:**
-- exp >= +0,15R per close
-- risk 3% (dibuka hanya setelah syarat ladder terpenuhi)
-- frekuensi >= 2,5 close/hari
+**Kenapa digabung.** Atas permintaan operator: jalankan seluruh paket. Untuk
+menjaga atribusi, setiap entry diberi CFG_TAG. Evaluasi membandingkan entry
+bertag v3 vs tag sebelumnya (v2 = ladder 0,5R + time stop).
 
-**Gerbang go/no-go (diputuskan sebelum data ada):**
+**Metrik keberhasilan (20 close baru, dihitung hanya trade CFG v3):**
+- Lulus: expectancy >= +0,05R DAN frekuensi entry tidak turun >50%.
+- Gagal: expectancy < +0,02R -> universe dikembalikan ke 20jt/50 dan
+  runner trail dikembalikan ke 0,75R/2,0R. Risk setengah entry ke-3 tetap
+  (tidak terkait hasil, itu manajemen risiko).
 
-| tanggal | yang diukur | lulus jika | gagal maka |
-|---|---|---|---|
-| 2026-11-20 | checkpoint vol4h 20/20 | exp >= +0,15R | cabut filter, baseline ulang |
-| 2026-11-30 | exp 20 close pasca-putusan | exp >= +0,15R | target turun jadi $75, risk tetap 2% |
-| 2026-12-31 | equity | >= $68 (+14%) | evaluasi ulang pendekatan |
-| 2027-01-31 | equity | >= $82 | target turun, jangan naikkan risk |
-| 2027-02-14 | equity | >= $100 | target meleset, dilaporkan apa adanya |
-
-**Larangan tegas:** menaikkan risk di atas 3% untuk mengejar tanggal, atau menambah
-syarat entry baru di tengah jalan, DILARANG. Satu-satunya jalur ke target adalah exp.
-
-**Ambang berhenti (dari mandat sebelumnya):** equity < $47 atau 4 minggu berturut exp negatif.
-
+**Risiko yang diterima.** Tiga perubahan sekaligus melemahkan atribusi; tag
+CFG hanya memisahkan terhadap versi lama, bukan memisahkan efek antar ketiganya.
 
 ---
 
-## Putusan checkpoint filter vol4h - GAGAL (2026-11-17)
+## Pre-register #5 - momentum sleeve terpisah (2026-11-20, sebelum hasil diketahui)
 
-**Hipotesis (dipra-registrasi 2026-11-08):** entry hanya di bar 4h dengan volume
->= 0,6x rata-rata 20 bar akan menaikkan expectancy.
+**Aturan:** BUY hanya bila close 4h > high 20 bar sebelumnya, RSI 55-70,
+ADX14 >= 25, volume >= 1,5x rata-rata 20 bar. Risk 1% (risk_mult 0,5),
+maksimal 1 posisi sleeve, dan hanya memakai slot yang tidak dipakai pullback.
+Posisi ditandai `sleeve=MOM` di `active_trades`; statistik dipisah total.
 
-**Hasil (19 close, 2026-11-08 07:24 s/d 2026-11-17 22:36 WIB):**
-- WR **42%** (ambang lulus 50%)
-- exp **-0,130R** (ambang lulus +0,15R)
-- Lunas secara matematis: dengan 1 close tersisa, exp maksimum yang mungkin
-  (-2,47 + 1,0)/20 = **-0,074R** - tetap gagal. Tidak perlu menunggu close ke-20.
+**Kenapa dipisah:** mesin pullback tidak akan pernah menangkap koin yang lari
+(EVAA +78% ditolak anti-pucuk). Kalau dicampur, edge pullback yang sudah
+terbukti (+0,18R) jadi tidak terbaca.
 
-**Putusan:** filter **DICABUT**. `MIN_VOLR_4H=0`. Alasan: tidak menaikkan edge;
-sampel 19 close konsisten di bawah ambang, bukan soal keberuntungan satu-dua trade.
+**Evaluasi 20 trade sleeve:**
+- Lulus: expectancy >= +0,05R -> risk naik ke 2%.
+- Gagal: expectancy < 0 -> MOM_SLEEVE=0 permanen.
+- Netral (0..+0,05R): tetap 1%, lanjut 20 trade lagi.
 
-**Pembanding sebelum filter (2026-10 s/d 08 Nov):** exp +0,13R pada 46 close.
-Artinya filter ini tidak menambah apa pun yang bisa dibuktikan.
-
-**Langkah berikut (dipra-registrasi):** ukur baseline 20 close tanpa filter.
-Sesudah itu uji kandidat #2 (ladder TP: avg win 0,66R vs avg loss 0,81R,
-payoff 0,82:1 - lihat catatan 2026-11-15). Filter sesi ditunda sesudahnya.
-
-
----
-
-## Pra-registrasi: uji gate momentum entry (2026-11-17)
-
-**Konteks:** checkpoint vol4h gagal (exp -0,130R, dicabut 2026-11-17).
-Median MFE 48 trade = **0,65R**, 31/48 tidak pernah lewat 0,8R. Diagnosis: entry
-tidak punya follow-through. Exit tuning sudah dibuktikan bukan solusi (TP ladder
-tidak bisa menolong trade yang tidak pernah sampai 1R).
-
-**Yang diuji:** satu gate momentum di entry, dipilih dari `entry_feat.csv`.
-
-**Aturan pemilihan variabel (dikunci SEBELUM data dianalisis):**
-1. Kandidat variabel: ai_conf, vol_ratio, RSI, ADX, ATR%, spread, depth, sesi.
-2. Sampel minimum: 20 entry tercatat. Bucket harus punya >= 7 trade.
-3. Variabel dipilih = yang punya selisih exp terbesar antara bucket atas dan bawah,
-   dengan syarat selisih >= 0,30R. Kalau tidak ada yang >= 0,30R -> **tidak ada gate
-   yang dipasang**, dan uji dinyatakan gagal tanpa menyentuh parameter.
-4. Ambang = median sampel (bukan angka yang dioptimalkan).
-5. Hanya SATU variabel. Bukan dua, bukan kombinasi.
-6. Gate dipasang sebagai kode baru, bukan dengan mengubah ambang yang sudah ada.
-
-**Kriteria lulus (20 close setelah gate):**
-- exp >= **+0,10R**
-- WR >= **45%** (turun dari 50% karena gate selektif biasanya menurunkan WR)
-- Jumlah kandidat lolos tetap >= ~40/hari (dicek dari funnel log)
-
-**Kalau gagal:** gate dicabut, ditulis di sini dengan angka, dan **bot dihentikan**.
-Tidak ada uji variabel ketiga. Dua kegagalan (vol4h, gate momentum) = bukti cukup
-bahwa pendekatan pullback ini tidak punya edge yang bisa ditemukan lewat tuning.
-
-**Batas waktu:** analisis dilakukan paling lambat **2026-11-28**. Kalau sampai
-tanggal itu `entry_feat.csv` belum mencapai 20 entry, uji dibatalkan dan bot
-dihentikan (bukan diperpanjang tanpa batas).
-
-
----
-
-## Putusan gate momentum - GAGAL di tahap seleksi variabel (2026-11-17)
-
-**Metode:** backfill fitur dari candle 4h tertutup untuk 54 dari 63 close
-(9 gagal: simbol /PARTIAL dan token saham ANTHROPIC tidak ada di binanceusdm).
-
-**Hasil bucket volr4h (satu-satunya variabel dengan selisih besar):**
-```
-0,0-0,7  n=20  exp -0,186R  WR 30%
-0,7-1,0  n=10  exp -0,035R  WR 60%
-1,0-1,3  n=11  exp -0,144R  WR 36%
-1,3-1,8  n= 4  exp -0,300R  WR 25%
->=1,8    n= 9  exp +0,752R  WR 89%
-```
-Split median (0,93): atas +0,070R vs bawah -0,073R = **+0,142R**.
-Ambang pra-registrasi +0,30R -> **TIDAK LULUS**.
-
-**Kenapa tidak dipasang:** bentuknya spike di ujung, bukan gradien. Bucket
-1,3-1,8 negatif (-0,300R) lalu >=1,8 melonjak. WR 89% pada n=9 adalah noise,
-bukan edge. Memasang gate >=1,8 = mencocokkan angka ke sampel kecil, kesalahan
-yang sama dengan filter vol4h.
-
-**Putusan:**
-- Tidak ada gate dipasang. Nol parameter strategi berubah.
-- `MAX_DAILY_ENTRIES=0` -> **entry live dihentikan**. Posisi terbuka (kalau ada)
-  tetap dikelola trail + watchdog.
-- Dua hipotesis gugur: filter vol4h, gate momentum.
-
-**Arah berikutnya (bukan tuning, ini ganti keluarga entry):**
-Data MFE menunjukkan median gerak hanya 0,65R - pullback tidak dapat
-follow-through. Satu-satunya bucket yang untung adalah volume expansion
-(>=1,8x), yang secara karakter adalah **momentum/breakout**, bukan pullback.
-Rencana: uji entry breakout volume-expansion **di shadow** (tanpa uang) minimal
-20 sinyal, diukur dari kline setelah sinyal muncul. Baru bicara uang kalau
-shadow itu exp >= +0,15R.
-
-
----
-
-## REGIME GATE (dipra-registrasi 2026-11-17, sebelum dipakai)
-
-**Masalah:** backtest 117 hari, 49 simbol, biaya realistis:
-```
-              semua     30% terbaru   15% terbaru
-breakout     +0,133R     -0,720R       -0,752R
-pullback     -0,199R     -0,558R       -0,362R
-meanrev      -0,076R     -0,250R       -0,277R
-```
-Semua keluarga entry negatif di pasar sekarang. Per kuartal pullback/breakout:
-Q1 +0,534R -> Q2 +0,180R -> Q3 -0,272R -> Q4 -0,767R. Edge tidak hilang karena
-setelan; rezim berubah.
-
-**Aturan gate (dikunci):**
-- `regime_monitor.py` (cron 07:10 WIB) menghitung exp strategi pullback di
-  **30 hari terakhir** dari candle 4h tertutup, biaya fee 0,039% + slip 0,075R.
-- Entry diizinkan hanya kalau **n >= 15** dan **exp >= +0,10R**.
-- File `regime_state.json` lebih tua dari 3 hari -> entry diblokir (fail-closed).
-- Tidak ada override manual. Kalau gate bilang tidak, bot tidak entry.
-
-**Kenapa bukan curve fitting:** ambang tidak dipilih dari hasil trade bot, tapi
-dari backtest yang sama sekali terpisah dari eksekusi live, dan diukur bergulir
-(30 hari) bukan dioptimalkan pada satu periode.
-
-
----
-
-## 1D BREAKOUT (pra-registrasi 2026-11-18, sebelum live)
-
-Backtest 1D, 22 koin likuid, 2,5 tahun (2024-05..2026-11), fee 0,039% + slip 0,075R:
-```
-ladder40  n=491  exp +0,135R  WR 56%  PF 1,32  | 16,3 sinyal/bulan
-          kuartal +0,22 +0,16 -0,08 +0,19  (3/4 positif)
-ladder20  n=491  exp +0,132R  (hold 20 hari, dipakai)
-fast30    n=491  exp +0,100R  (ditolak, edge turun)
-```
-Aturan entry: close 1D > high 20 hari, volume >= 1,5x rata-rata 20, close > EMA50.
-Exit: SL 2xATR(14,1D), ladder 1,0/1,2/1,4/1,7R (26/24/22/18%), runner 10%, trail
-0,75R setelah 2R, time exit 20 hari.
-
-**Kenapa beda dari 4h:** positif di 3 dari 4 kuartal lintas 2,5 tahun (4h hanya di
-paruh-1). Fee 0,06% round trip vs target 1,7R -> tidak signifikan.
-
-**Batas risiko (dikunci):** risk 2% per trade, maks 8 posisi (heat 16%), leverage 3x
-isolated. Tidak menyerap semua sinyal (16,3/bulan, kapasitas ~8) — sadar dan disengaja.
-
-**Review di 20 close.** Lulus (exp >= +0,10R, WR >= 45%) -> lanjut. Gagal -> cabut.
+**Rollback instan:** `MOM_SLEEVE=0` di `.env`, tanpa ubah kode.

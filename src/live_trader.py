@@ -5,7 +5,6 @@ import threading
 import hashlib
 import hmac
 import logging
-import math
 import urllib.request
 import ccxt
 from typing import Dict, Any, List, Optional

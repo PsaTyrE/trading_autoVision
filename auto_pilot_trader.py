@@ -84,29 +84,6 @@ JOURNAL = os.getenv("JOURNAL_FILE", os.path.join(BASE_DIR, "trade_log.csv"))
 CLOSED = os.getenv("CLOSED_FILE", os.path.join(BASE_DIR, "trade_closed.csv"))
 DAILY_CAP_SEC = int(os.getenv("DAILY_CAP_SEC", "86400"))
 DAILY_MAX = int(os.getenv("MAX_DAILY_ENTRIES", "3"))
-
-REGIME_FILE = os.path.join(BASE_DIR, "regime_state.json")
-
-
-def regime_go():
-    """Entry hanya kalau exp strategi ini di 30 hari terakhir >= +0,10R.
-
-    Diukur regime_monitor.py (cron harian). Fail-closed: file hilang, basi
-    >3 hari, atau exp di bawah ambang -> entry diblokir.
-    """
-    try:
-        d = json.load(open(REGIME_FILE, encoding="utf-8"))
-        if time.time() - float(d.get("ts") or 0) > 3 * 86400:
-            log("REGIME: state basi (>3 hari), entry diblokir")
-            return False
-        ok = bool(d.get("go")) and float(d.get("exp") or -9) >= 0.10
-        if not ok:
-            log(f"REGIME NOGO: exp {d.get('exp')}R n={d.get('n')} (syarat +0,10R)")
-        return ok
-    except Exception as e:
-        log(f"REGIME: state tidak terbaca ({err_detail(e)}), entry diblokir")
-        return False
-
 RISK_USDT = float(os.getenv("RISK_USDT", "0"))  # 0 = auto compounding dari equity live
 MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "3"))
 MIN_NOTIONAL = 5.0
@@ -133,9 +110,12 @@ MAX_SL_PCT = float(os.getenv("MAX_SL_PCT", "5.0"))
 # Dulu entry ladder dan re-arm (_tp_legs_for) masing-masing punya salinan angka
 # sendiri. Kalau satu diubah, re-arm memulihkan leg di level yang berbeda dari
 # yang benar-benar dipasang. Sekarang keduanya membaca konstanta ini.
-LADDER_LEVELS = [1.0, 1.2, 1.4, 1.7]
-LADDER_WEIGHTS = [0.26, 0.24, 0.22, 0.18]
+LADDER_LEVELS = [0.5, 1.0, 1.7]
+LADDER_WEIGHTS = [0.50, 0.25, 0.15]
 LADDER_RUNNER_PCT = 0.10          # porsi qty yang tidak dipasangi TP
+TIME_STOP_H = float(os.getenv("TIME_STOP_H", "24"))  # jam; 0 = mati
+TIME_STOP_MIN_R = 0.5             # wajib pernah sentuh 0,5R sebelum batas ini
+CFG_TAG = "v3-2026-11-20"           # penanda paket aturan; dipakai saat evaluasi
 REARM_MAX_TRIES = 3               # batas percobaan re-arm per posisi
 TP_DUP_TOL = 2e-4                 # toleransi harga saat cek "order TP ini sudah ada?"
 NEWS_TAG_TITLE_WINDOW_MIN = 180   # judul berita cuma ditempel kalau |menit| <= ini
@@ -255,7 +235,7 @@ def trail_lock_sl(side, entry, price, r_dist, dec=4):
     if lock == 0.0:
         lv = entry * 1.001 if side == "LONG" else entry * QTY_COVER_TOL
     out = round(lv, dec)
-    if g >= 2.0:
+    if g >= 1.0:
         rt = runner_trail_sl(side, price, r_dist, dec)
         if rt is not None:
             out = max(out, rt) if side == "LONG" else min(out, rt)
@@ -270,7 +250,7 @@ def runner_trail_sl(side, price, r_dist, dec=4):
         return None
     if r_dist <= 0:
         return None
-    off = r_dist * 0.75
+    off = r_dist * 0.5
     return round(price - off, dec) if side == "LONG" else round(price + off, dec)
 
 
@@ -330,15 +310,18 @@ def daily_loss_blocked(realized: float, equity: float, pct: float = 0.05) -> boo
         return False
 
 
-def risk_budget(equity: float) -> float:
-    """Besar risiko (USDT) per trade, dihitung proporsional dari equity live."""
+def risk_budget(equity: float, frac: float = 1.0) -> float:
+    """Besar risiko (USDT) per trade, dihitung proporsional dari equity live.
+
+    frac: pengali untuk entry yang kualitasnya lebih rendah (entry ke-3 = 0,5).
+    """
     eq = float(equity or 0.0)
     pct = RISK_TIERS[0][1]
     for thr, p in RISK_TIERS:
         if eq >= thr:
             pct = p
     pct = min(pct, RISK_PCT_CAP)
-    amt = round(eq * pct, 2)
+    amt = round(eq * pct * max(0.1, min(1.0, float(frac))), 2)
     if RISK_USDT > 0:
         amt = min(amt, RISK_USDT)
     return max(0.30, amt)
@@ -1041,6 +1024,32 @@ def manage_open_positions(t):
         except Exception:
             pass
 
+        # --- TIME STOP ---
+        # Trade datar 24 jam = modal mati di slot terbatas. Tutup dan pakai
+        # slotnya untuk sinyal lain. Guard: hanya kalau belum pernah sentuh 0,5R,
+        # supaya posisi yang sedang jalan tidak dipotong.
+        try:
+            _tso = int(trade_meta.get("ts") or 0)
+            if TIME_STOP_H > 0 and _tso > 0 and r_dist > 0 and entry > 0:
+                _age_h = (time.time() - _tso) / 3600.0
+                _mfe = float(((st.get("excursions") or {}).get(symbol) or {}).get("mfe_pct") or 0.0)
+                _need = (r_dist / entry) * 100.0 * TIME_STOP_MIN_R
+                if _age_h >= TIME_STOP_H and _mfe < _need:
+                    log(f"TIME STOP {symbol}: {_age_h:.1f} jam, MFE {_mfe:.2f}% < {TIME_STOP_MIN_R:g}R ({_need:.2f}%) - tutup")
+                    _cr = t.close_position(symbol)
+                    if _cr:
+                        try:
+                            TelegramNotifier().send_message(
+                                f"\u23f1 <b>TIME STOP</b> {symbol}\n"
+                                f"Umur {_age_h:.0f} jam, MFE cuma {_mfe:.2f}% (butuh {_need:.2f}% = {TIME_STOP_MIN_R:g}R)\n"
+                                f"Ditutup supaya slot tidak nyangkut di trade datar.")
+                        except Exception:
+                            pass
+                        continue
+                    log(f"TIME STOP FAILED {symbol}: {err_detail(_cr)}")
+        except Exception as _tse:
+            log(f"TIME STOP ERROR {symbol}: {err_detail(_tse)}")
+
         # Simpan SL yang BENAR-BENAR terpasang di exchange. at["sl"] adalah SL awal dari
         # sinyal; setelah trailing angka itu basi, dan pengukuran slippage jadi salah.
         try:
@@ -1219,10 +1228,27 @@ def manage_open_positions(t):
 MAKER_TIMEOUT_SEC = 90
 MAKER_POLL_SEC = 5
 MAKER_MAX_SLIP_ATR = 0.25
+MAKER_DEPTH = os.getenv("MAKER_DEPTH_FILE", os.path.join(BASE_DIR, "maker_depth.csv"))
+
+def _depth_log(row):
+    """Satu baris per percobaan entry: harga terbaik selama menunggu."""
+    try:
+        import csv as _csv
+        fresh = not os.path.exists(MAKER_DEPTH)
+        with open(MAKER_DEPTH, "a", newline="") as f:
+            w = _csv.writer(f)
+            if fresh:
+                w.writerow(["ts", "symbol", "side", "ref", "best_px", "atr", "filled", "waited_s"])
+            w.writerow(row)
+    except Exception as e:
+        log("depth log gagal: %s" % str(e)[:80])
+
 
 def maker_entry(t, sym, side, qty, ref_price, atr):
     """Post-only at the touch. Never chases: abandons if price runs off."""
     oid = None
+    _t0 = time.time()
+    _best = None      # harga paling menguntungkan yang sempat terlihat
     try:
         book = t.exchange.fetch_order_book(sym, limit=5)
         side_book = book["bids"] if side.lower() == "buy" else book["asks"]
@@ -1243,11 +1269,17 @@ def maker_entry(t, sym, side, qty, ref_price, atr):
                 continue
             status = o.get("status")
             if status == "closed":
+                _depth_log([int(_t0), sym, side, ref_price, _best, atr, 1, round(time.time() - _t0)])
                 return o
             if status in ("canceled", "rejected", "expired"):
                 return None
             try:
-                last_px = float(t.exchange.fetch_ticker(sym)["last"])
+                _tk = t.exchange.fetch_ticker(sym)
+                last_px = float(_tk["last"])
+                # LONG diuntungkan harga turun, SHORT diuntungkan harga naik.
+                _fav = float(_tk.get("bid") or last_px) if side.lower() == "buy" else float(_tk.get("ask") or last_px)
+                if _best is None or (_fav < _best if side.lower() == "buy" else _fav > _best):
+                    _best = _fav
                 slip = abs(last_px - ref_price)
                 if slip > MAKER_MAX_SLIP_ATR * atr:
                     log(f"Maker abandon {sym}: slip {slip:.4f} > {MAKER_MAX_SLIP_ATR}*ATR ({MAKER_MAX_SLIP_ATR*atr:.4f})")
@@ -1262,6 +1294,7 @@ def maker_entry(t, sym, side, qty, ref_price, atr):
             t.cancel_all_orders(sym)
         except Exception:
             pass
+        _depth_log([int(_t0), sym, side, ref_price, _best, atr, 0, round(time.time() - _t0)])
         return None
     except Exception as e:
         log(f"Maker entry error {sym}: {e}")
@@ -1292,6 +1325,74 @@ def sl_width_ok(price, sl_dist):
     if p is None:
         return True
     return p <= MAX_SL_PCT
+
+
+def adx14(d, n: int = 14):
+    """ADX Wilder sederhana dari DataFrame berkolom h/l/c."""
+    up = d.h.diff()
+    dn = -d.l.diff()
+    pdm = ((up > dn) & (up > 0)) * up
+    mdm = ((dn > up) & (dn > 0)) * dn
+    tr = pd.concat(
+        [d.h - d.l, (d.h - d.c.shift()).abs(), (d.l - d.c.shift()).abs()], axis=1
+    ).max(axis=1)
+    atr = tr.rolling(n).mean()
+    pdi = 100 * pdm.rolling(n).mean() / atr
+    mdi = 100 * mdm.rolling(n).mean() / atr
+    dx = 100 * (pdi - mdi).abs() / (pdi + mdi).replace(0, 1e-9)
+    return dx.rolling(n).mean()
+
+
+def momentum_candidates(t, universe, occupied, st):
+    """Sleeve momentum: breakout 20-bar high 4h, maks 1 posisi, risk 1%.
+
+    Syarat: close > high 20 bar sebelumnya, RSI 55-70 (bukan jenuh), ADX >= 25,
+    volume >= 1,5x rata-rata 20 bar. Dinilai terpisah dari mesin pullback:
+    posisi ditandai sleeve=MOM, statistik tidak boleh dicampur.
+    """
+    if str(os.getenv("MOM_SLEEVE", "1")).strip() == "0":
+        return []
+    at = st.get("active_trades") or {}
+    if any((v or {}).get("sleeve") == "MOM" for v in at.values()):
+        return []
+    out = []
+    for sym in universe:
+        if sym in occupied:
+            continue
+        try:
+            with contextlib.redirect_stdout(sys.stderr):
+                raw = t.exchange.fetch_ohlcv(sym, timeframe="4h", limit=320)
+            if len(raw) < strategy.MIN_BARS:
+                continue
+            d = strategy.features(pd.DataFrame(raw, columns=["t", "o", "h", "l", "c", "v"]))
+            i = -2
+            c = float(d.c.iloc[i])
+            hh = float(d.hh.iloc[i])
+            rsi = float(d.rsi.iloc[i])
+            vma = float(d.vma.iloc[i])
+            vr = (float(d.v.iloc[i]) / vma) if vma > 0 else 0.0
+            ax = float(adx14(d).iloc[i])
+            if not (c > hh and 55.0 <= rsi <= 70.0 and vr >= 1.5 and ax >= 25.0):
+                continue
+            meta = {
+                "close": c,
+                "atr": float(d.atr.iloc[i]),
+                "bar_ts": int(d.t.iloc[i]),
+                "vol_ratio": vr,
+                "rsi": rsi,
+                "ema50": float(d.ema50.iloc[i]),
+                "adx": ax,
+                "sleeve": "MOM",
+                "risk_mult": 0.5,
+                "tf": "4h",
+            }
+            out.append((sym, "BUY", meta, vr))
+            log("MOM SETUP %s: breakout 20-bar high rsi %.1f adx %.1f volr %.2fx" % (sym, rsi, ax, vr))
+        except Exception as e:
+            log("MOM scan %s: %s" % (sym, str(e)[:100]))
+            continue
+    out.sort(key=lambda x: -x[3])
+    return out[:1]
 
 
 def scan_and_enter(t):
@@ -1393,10 +1494,6 @@ def scan_and_enter(t):
     _prev = int(st.get("day_entries") or 0) if st.get("day_key") == _today else 0
     if _prev >= DAILY_MAX:
         log(f"Daily cap reached ({_prev}/{DAILY_MAX} untuk hari UTC {_today}; reset 00:00 UTC = 07:00 WIB). Waiting.")
-        return
-
-    # --- REGIME GATE ---
-    if not regime_go():
         return
 
     # --- SCAN CLOSED 4h BARS ---
@@ -1503,6 +1600,16 @@ def scan_and_enter(t):
     # Rank candidates: pita volume surge (band) atau surge terbesar (surge)
     candidates = rank_candidates(candidates)
 
+    # Sleeve momentum: kandidat breakout ditambahkan SETELAH pullback agar
+    # slot selalu didahulukan mesin yang sudah terbukti.
+    try:
+        _mom = momentum_candidates(t, _universe, occupied_symbols, st)
+        if _mom:
+            log("MOMENTUM: %d kandidat breakout masuk antrean" % len(_mom))
+            candidates = candidates + _mom
+    except Exception as _me:
+        log("MOMENTUM scan gagal: %s" % str(_me)[:120])
+
     # Process candidates up to available slots with Correlation Guard
     entered_count = 0
     for sym, side, meta, vol_ratio in candidates:
@@ -1525,7 +1632,13 @@ def scan_and_enter(t):
             continue
 
         try:
-            dyn_risk = round(risk_budget(equity) * float(meta.get("risk_mult", 1.0)), 2)
+            # Entry ke-3 dalam sehari = kandidat sisa, kualitas paling rendah.
+            # Setengah risk: tetap dapat exposure, tidak merusak hari kalau salah.
+            _ord = _prev + entered_count
+            _frac = 0.5 if _ord >= 2 else 1.0
+            dyn_risk = round(risk_budget(equity, _frac) * float(meta.get("risk_mult", 1.0)), 2)
+            if _frac < 1.0:
+                log(f"RISK HALF {sym}: entry ke-{_ord + 1} hari ini -> risk ${dyn_risk}")
             qty = float(t.exchange.amount_to_precision(resolved, dyn_risk / sl_dist))
         except Exception as e:
             log(f"Skip {sym}: qty precision ({e})")
@@ -1863,7 +1976,8 @@ def scan_and_enter(t):
             "symbol": sym, "side": side_str, "entry": fill, "qty": qty,
             "sl": sl_price, "tp1": tp1_price, "tp2": tp2_price,
             "tp_legs": _legs_rec, "tp_failed": _legs_fail_rec,
-            "cluster": cluster, "ts": int(time.time()), "risk": round(risk_real, 4)
+            "cluster": cluster, "ts": int(time.time()), "risk": round(risk_real, 4),
+            "cfg": CFG_TAG, "sleeve": str(meta.get("sleeve") or "PULLBACK")
         }
 
         at_dict = st.get("active_trades") or {}
@@ -1896,7 +2010,7 @@ def scan_and_enter(t):
         except Exception as je:
             log(f"Journal error: {je}")
 
-        log(f"ENTRY {sym} {side_str} qty={qty} @ {fill} notional=${notional:.2f} SL={sl_price} TP1={tp1_price} TP2={tp2_price} risk=${risk_real:.2f} fee_rt=${fee_rt:.4f}")
+        log(f"CFG {CFG_TAG} ENTRY {sym} {side_str} qty={qty} @ {fill} notional=${notional:.2f} SL={sl_price} TP1={tp1_price} TP2={tp2_price} risk=${risk_real:.2f} fee_rt=${fee_rt:.4f}")
 
         # MAKER_PROBE: ukur spread + kedalaman top-of-book tiap entry. Dasar
         # keputusan pindah ke limit/maker (fee sekarang 13% gross edge).
@@ -1916,24 +2030,6 @@ def scan_and_enter(t):
                                   "top_depth_usdt", "notional", "fee_rt"])
                 _pw.writerow([int(time.time()), sym, side_str, _bb, _ba,
                               round(_spr, 5), round(_dep, 2), round(notional, 2), round(fee_rt, 4)])
-            # ENTRY_FEAT: fitur pra-entry untuk uji variabel pasca-checkpoint.
-            _fp = os.path.join(BASE_DIR, "entry_feat.csv")
-            _newf = not os.path.exists(_fp)
-            _hr = (time.gmtime().tm_hour + 7) % 24
-            _ses = "ASIA" if 7 <= _hr < 14 else ("EU" if 14 <= _hr < 20 else "US")
-            with open(_fp, "a", newline="") as _ff:
-                _fw = csv.writer(_ff)
-                if _newf:
-                    _fw.writerow(["ts", "symbol", "side", "ai_conf", "vol_ratio", "rsi",
-                                  "adx", "atr_pct", "sl_pct", "spread_pct", "depth_usdt",
-                                  "score", "hour_wib", "session", "notional", "risk_usd"])
-                _fw.writerow([int(time.time()), sym, side_str, round(float(ai_res.confidence), 3),
-                              round(float(meta["vol_ratio"]), 3), round(float(meta.get("rsi") or 0.0), 1),
-                              round(float(meta.get("adx") or 0.0), 1),
-                              round(meta["atr"] / price * 100, 3),
-                              round(sl_dist / price * 100, 3), round(_spr, 5), round(_dep, 2),
-                              meta.get("score", 50), _hr, _ses,
-                              round(notional, 2), round(risk_real, 3)])
             log(f"MAKER PROBE {sym}: spread {_spr:.3f}% top depth ${_dep:.0f} vs fee taker ${fee_rt:.4f}")
         except Exception as _mpe:
             log(f"MAKER PROBE skip {sym}: {err_detail(_mpe)}")
@@ -2051,6 +2147,44 @@ def maker_shadow(t):
     log(f"MAKER SHADOW: {hit_n}/{len(out)} limit sentuh kena (kumulatif {len(done) + len(out)})")
 
 
+def foreign_positions(t, st):
+    """Posisi terbuka di akun yang tidak tercatat di active_trades bot ini."""
+    try:
+        known = set((st.get("active_trades") or {}).keys())
+        out = []
+        for p in get_open_positions(t) or []:
+            sym = p.get("symbol")
+            if sym and sym not in known:
+                out.append((sym, p.get("side"), float(p.get("contracts") or 0)))
+        return out
+    except Exception as e:
+        log("foreign check gagal: %s" % str(e)[:120])
+        return []
+
+
+def _foreign_alert(items):
+    """Alert posisi asing, maksimal 1x/jam."""
+    try:
+        import json as _json
+        fp = "/tmp/.foreign_alert.json"
+        now = time.time()
+        try:
+            last = float((_json.load(open(fp)) or {}).get("ts") or 0)
+        except Exception:
+            last = 0.0
+        if now - last < 3600:
+            return
+        body = "\n".join("• %s %s qty %s" % (s, sd, q) for s, sd, q in items[:5])
+        TelegramNotifier().send_message(
+            "⚠️ <b>POSISI ASING TERDETEKSI</b>\n" + body +
+            "\n\nTidak ada di state bot. Kemungkinan instance lain pakai API key sama.\n"
+            "Entry bot DIHENTIKAN sampai posisi ini hilang."
+        )
+        _json.dump({"ts": now}, open(fp, "w"))
+    except Exception:
+        pass
+
+
 def run():
     with contextlib.redirect_stdout(sys.stderr):
         t = BinanceFuturesTrader(is_testnet=False)
@@ -2064,6 +2198,15 @@ def run():
     news_heads_up(t)
     # Check open positions count vs limit
     open_pos = get_open_positions(t)
+
+    # Guard posisi asing: satu akun = satu sistem. Kalau ada posisi yang bukan
+    # milik bot, entry dihentikan siklus ini (bukan ditutup) + alert.
+    _fp_items = foreign_positions(t, st) if str(os.getenv("FOREIGN_GUARD", "1")).strip() != "0" else []
+    if _fp_items:
+        log("FOREIGN POSITION: %s - entry dihentikan" % ", ".join(x[0] for x in _fp_items))
+        _foreign_alert(_fp_items)
+        return
+
     if len(open_pos) < MAX_OPEN_POSITIONS:
         if os.getenv("ENTRY_ENABLED", "false").lower() in ("1", "true", "yes", "on"):
             scan_and_enter(t)
@@ -2079,11 +2222,29 @@ def main():
         import traceback
         log(f"FATAL {type(e).__name__}: {e}")
         print(traceback.format_exc()[-800:], file=sys.stderr, flush=True)
+        # Throttle: error yang sama maksimal 1 alert/jam. 172 alert -2015
+        # dalam 9 hari membuat bot di-mute, jadi kegagalan justru tak terlihat.
         try:
-            TelegramNotifier().send_message(
-                f"❌ <b>BOT ERROR</b>\n<code>{type(e).__name__}: {str(e)[:200]}</code>\n"
-                f"Run berikutnya otomatis coba lagi."
-            )
+            import json as _json
+            _fp = "/tmp/.fatal_alert.json"
+            _key = f"{type(e).__name__}:{str(e)[:60]}"
+            _now = time.time()
+            _last = {}
+            try:
+                _last = _json.load(open(_fp)) or {}
+            except Exception:
+                _last = {}
+            _prev = _last.get(_key) or 0
+            if _now - float(_prev) >= 3600:
+                TelegramNotifier().send_message(
+                    f"❌ <b>BOT ERROR</b>\n<code>{type(e).__name__}: {str(e)[:200]}</code>\n"
+                    f"Run berikutnya otomatis coba lagi. (alert sama dimute 1 jam)"
+                )
+                _last[_key] = _now
+                _last = {k: v for k, v in _last.items() if _now - float(v) < 86400}
+                _json.dump(_last, open(_fp, "w"))
+            else:
+                log(f"FATAL ALERT THROTTLED ({int((3600 - (_now - float(_prev))) / 60)} menit lagi)")
         except Exception:
             pass
         sys.exit(1)

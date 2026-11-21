@@ -3,7 +3,6 @@
   "day_entries": 0,
   "last_signal_ts": 1794909600000,
   "closed_syms": [
-    "1000PEPE/USDT:USDT",
     "AAVE/USDT:USDT",
     "ANTHROPIC/USDT:USDT",
     "APR/USDT:USDT",
@@ -12,9 +11,8 @@
     "BTW/USDT:USDT",
     "CRCL/USDT:USDT",
     "DOOD/USDT:USDT",
-    "DRAM/USDT:USDT",
     "ENA/USDT:USDT",
-    "EWY/USDT:USDT",
+    "GOOGL/USDT:USDT",
     "GTC/USDT:USDT",
     "INJ/USDT:USDT",
     "IOST/USDT:USDT",
@@ -24,10 +22,6 @@
     "NEAR/USDT:USDT",
     "PIPPIN/USDT:USDT",
     "Q/USDT:USDT",
-    "SAMSUNG/USDT:USDT",
-    "SKHYNIX/USDT:USDT",
-    "SOL/USDT:USDT",
-    "SPCX/USDT:USDT",
     "STRK/USDT:USDT",
     "UNI/USDT:USDT",
     "WIF/USDT:USDT",
@@ -51,11 +45,9 @@
     "Congressional Elections": 1793735168,
     "Unemployment Claims": 1793901609,
     "Average Hourly Earnings m/m": 1793988009,
-    "FOMC Member Waller Speaks": 1794317408,
-    "Core PPI m/m": 1794592808,
-    "Fed Chairman Warsh Speaks": 1794864608
+    "FOMC Member Waller Speaks": 1794317408
   },
-  "last_entry_ts": 1794913242.048624,
+  "last_entry_ts": 1795194166.8955553,
   "recon_ids": {
     "INJ/USDT:USDT": [
       "816757713",
@@ -113,9 +105,7 @@
     ],
     "WLD/USDT:USDT": [
       "1405638301",
-      "1405731815",
-      "1412476860",
-      "1412899731"
+      "1405731815"
     ],
     "WIF/USDT:USDT": [
       "1259414532",
@@ -170,17 +160,19 @@
     ],
     "XAG/USDT:USDT": [
       "154743328",
-      "154929268"
+      "154929268",
+      "161122858",
+      "161224097"
     ],
     "CRCL/USDT:USDT": [
       "101880746",
-      "102007110",
-      "104402008",
-      "104486261"
+      "102007110"
     ],
-    "DRAM/USDT:USDT": [
-      "49266165",
-      "49288848"
+    "PIPPIN/USDT:USDT": [
+      "771035728",
+      "771806020",
+      "771823868",
+      "771881427"
     ],
     "SKHYNIX/USDT:USDT": [
       "376739755",
@@ -232,7 +224,7 @@
     "DOOD/USDT:USDT": 0.0005501,
     "GTC/USDT:USDT": 0.09719123,
     "UNI/USDT:USDT": -0.00139736,
-    "WLD/USDT:USDT": 0.01323045,
+    "WLD/USDT:USDT": 0.0,
     "WIF/USDT:USDT": -0.00102672,
     "ZEC/USDT:USDT": 0.00429066,
     "STRK/USDT:USDT": 0.0,
