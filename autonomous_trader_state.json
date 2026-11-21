@@ -1,5 +1,5 @@
 {
-  "day_key": "2026-11-19",
+  "day_key": "2026-11-21",
   "day_entries": 0,
   "last_signal_ts": 1794909600000,
   "closed_syms": [
@@ -22,6 +22,7 @@
     "MSTR/USDT:USDT",
     "MUU/USDT:USDT",
     "NEAR/USDT:USDT",
+    "PIPPIN/USDT:USDT",
     "Q/USDT:USDT",
     "SAMSUNG/USDT:USDT",
     "SKHYNIX/USDT:USDT",
@@ -35,44 +36,7 @@
     "XRP/USDT:USDT",
     "ZEC/USDT:USDT"
   ],
-  "active_trades": {
-    "PIPPIN/USDT:USDT": {
-      "symbol": "PIPPIN/USDT:USDT",
-      "side": "LONG",
-      "entry": 0.01637,
-      "qty": 325.0,
-      "sl": 0.013,
-      "tp1": null,
-      "tp2": null,
-      "tp_legs": [
-        [
-          1.01,
-          84.0,
-          0.01976
-        ],
-        [
-          1.21,
-          78.0,
-          0.02044
-        ],
-        [
-          1.41,
-          71.0,
-          0.02111
-        ],
-        [
-          1.71,
-          58.0,
-          0.02213
-        ]
-      ],
-      "risk": 1.0952,
-      "risk_est": true,
-      "ts": 1795073294,
-      "adopted": true,
-      "sl_live": 0.013
-    }
-  },
+  "active_trades": {},
   "excursions": {
     "BNB/USDT:USDT": {
       "mfe_pct": 0.513,
@@ -81,10 +45,6 @@
     "DOOD/USDT:USDT": {
       "mfe_pct": 0.863,
       "mae_pct": -1.841
-    },
-    "PIPPIN/USDT:USDT": {
-      "mfe_pct": 0.672,
-      "mae_pct": -0.183
     }
   },
   "news_alerted": {
@@ -257,6 +217,12 @@
       "225947977",
       "225947978",
       "225947979"
+    ],
+    "PIPPIN/USDT:USDT": [
+      "771035728",
+      "771806020",
+      "771823868",
+      "771881427"
     ]
   },
   "recon_funding": {
@@ -284,7 +250,8 @@
     "SOL/USDT:USDT": -0.0017864,
     "SAMSUNG/USDT:USDT": -0.00502435,
     "NEAR/USDT:USDT": 0.0,
-    "SPCX/USDT:USDT": 0.0
+    "SPCX/USDT:USDT": 0.0,
+    "PIPPIN/USDT:USDT": 0.00275364
   },
   "active_trade": null
 }

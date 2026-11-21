@@ -891,6 +891,16 @@ def sweep_orphan_orders(t):
         log(f"ORPHAN SWEEP: cancelled {n} order(s) with no position")
     return n
 
+def _db_syms():
+    """Simbol milik modul 1D daily_breakout — jangan disentuh bot 4h."""
+    try:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "daily_breakout_state.json")
+        with open(path, encoding="utf-8") as f:
+            return set(json.load(f).keys())
+    except Exception:
+        return set()
+
+
 def manage_open_positions(t):
     """Monitor ALL live positions, update trailing stop / break-even independently."""
     positions = get_open_positions(t)
@@ -902,8 +912,12 @@ def manage_open_positions(t):
     legacy_at = st.get("active_trade")
 
     managed_syms = []
+    db_syms = _db_syms()
     for pos in positions:
         symbol = pos["symbol"]
+        if symbol in db_syms:
+            log(f"SKIP {symbol}: posisi modul 1D, bot 4h tidak ikut campur")
+            continue
         qty = abs(float(pos["contracts"]))
         entry = float(pos.get("entryPrice") or 0)
         if entry <= 0:
