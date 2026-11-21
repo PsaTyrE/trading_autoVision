@@ -1,7 +1,7 @@
 {
   "day_key": "2026-11-20",
-  "day_entries": 0,
-  "last_signal_ts": 1794297600000,
+  "day_entries": 2,
+  "last_signal_ts": 1795190400000,
   "closed_syms": [
     "AAVE/USDT:USDT",
     "ANTHROPIC/USDT:USDT",
@@ -12,6 +12,7 @@
     "CRCL/USDT:USDT",
     "DOOD/USDT:USDT",
     "ENA/USDT:USDT",
+    "GOOGL/USDT:USDT",
     "GTC/USDT:USDT",
     "INJ/USDT:USDT",
     "IOST/USDT:USDT",
@@ -44,7 +45,7 @@
     "Average Hourly Earnings m/m": 1793988009,
     "FOMC Member Waller Speaks": 1794317408
   },
-  "last_entry_ts": 1794323085.7037992,
+  "last_entry_ts": 1795194166.8955553,
   "recon_ids": {
     "INJ/USDT:USDT": [
       "816757713",
@@ -157,7 +158,9 @@
     ],
     "XAG/USDT:USDT": [
       "154743328",
-      "154929268"
+      "154929268",
+      "161122858",
+      "161224097"
     ],
     "CRCL/USDT:USDT": [
       "101880746",
@@ -168,6 +171,10 @@
       "771806020",
       "771823868",
       "771881427"
+    ],
+    "GOOGL/USDT:USDT": [
+      "38103544",
+      "38234714"
     ]
   },
   "recon_funding": {
@@ -187,7 +194,8 @@
     "MSTR/USDT:USDT": -0.00471581,
     "XAG/USDT:USDT": 0.0,
     "CRCL/USDT:USDT": -0.00255515,
-    "PIPPIN/USDT:USDT": 0.0
+    "PIPPIN/USDT:USDT": 0.0,
+    "GOOGL/USDT:USDT": 0.0
   },
   "active_trade": null
 }

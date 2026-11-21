@@ -1214,10 +1214,27 @@ def manage_open_positions(t):
 MAKER_TIMEOUT_SEC = 90
 MAKER_POLL_SEC = 5
 MAKER_MAX_SLIP_ATR = 0.25
+MAKER_DEPTH = os.getenv("MAKER_DEPTH_FILE", os.path.join(BASE_DIR, "maker_depth.csv"))
+
+def _depth_log(row):
+    """Satu baris per percobaan entry: harga terbaik selama menunggu."""
+    try:
+        import csv as _csv
+        fresh = not os.path.exists(MAKER_DEPTH)
+        with open(MAKER_DEPTH, "a", newline="") as f:
+            w = _csv.writer(f)
+            if fresh:
+                w.writerow(["ts", "symbol", "side", "ref", "best_px", "atr", "filled", "waited_s"])
+            w.writerow(row)
+    except Exception as e:
+        log("depth log gagal: %s" % str(e)[:80])
+
 
 def maker_entry(t, sym, side, qty, ref_price, atr):
     """Post-only at the touch. Never chases: abandons if price runs off."""
     oid = None
+    _t0 = time.time()
+    _best = None      # harga paling menguntungkan yang sempat terlihat
     try:
         book = t.exchange.fetch_order_book(sym, limit=5)
         side_book = book["bids"] if side.lower() == "buy" else book["asks"]
@@ -1238,11 +1255,17 @@ def maker_entry(t, sym, side, qty, ref_price, atr):
                 continue
             status = o.get("status")
             if status == "closed":
+                _depth_log([int(_t0), sym, side, ref_price, _best, atr, 1, round(time.time() - _t0)])
                 return o
             if status in ("canceled", "rejected", "expired"):
                 return None
             try:
-                last_px = float(t.exchange.fetch_ticker(sym)["last"])
+                _tk = t.exchange.fetch_ticker(sym)
+                last_px = float(_tk["last"])
+                # LONG diuntungkan harga turun, SHORT diuntungkan harga naik.
+                _fav = float(_tk.get("bid") or last_px) if side.lower() == "buy" else float(_tk.get("ask") or last_px)
+                if _best is None or (_fav < _best if side.lower() == "buy" else _fav > _best):
+                    _best = _fav
                 slip = abs(last_px - ref_price)
                 if slip > MAKER_MAX_SLIP_ATR * atr:
                     log(f"Maker abandon {sym}: slip {slip:.4f} > {MAKER_MAX_SLIP_ATR}*ATR ({MAKER_MAX_SLIP_ATR*atr:.4f})")
@@ -1257,6 +1280,7 @@ def maker_entry(t, sym, side, qty, ref_price, atr):
             t.cancel_all_orders(sym)
         except Exception:
             pass
+        _depth_log([int(_t0), sym, side, ref_price, _best, atr, 0, round(time.time() - _t0)])
         return None
     except Exception as e:
         log(f"Maker entry error {sym}: {e}")
