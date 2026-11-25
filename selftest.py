@@ -369,6 +369,38 @@ try:
 except Exception as _e:
     check("momentum sleeve check bisa jalan: %s" % _e, False)
 
+# --- STATIC: nama undefined (kelas bug "import math hilang" / p vs pos) ---
+try:
+    import glob as _g
+    from pyflakes.api import checkPath as _cp
+    from pyflakes.reporter import Reporter as _Rep
+
+    class _R(_Rep):
+        def __init__(self):
+            self.bad = []
+
+        def unexpectedError(self, f, m):
+            self.bad.append((f, m))
+
+        def syntaxError(self, f, m, l, o, t):
+            self.bad.append((f, m))
+
+        def flake(self, w):
+            if w.__class__.__name__ in ("UndefinedName", "UndefinedLocal", "UndefinedExport"):
+                self.bad.append((w.filename, w.message % w.message_args))
+
+    _rep = _R()
+    for _f in ["auto_pilot_trader.py", "daily_breakout.py", "regime_monitor.py",
+               "profit_report.py", "safety_net.py", "bar_digest.py", "gate_report.py"] + _g.glob("src/*.py"):
+        if os.path.exists(_f):
+            _cp(_f, _rep)
+    check("pyflakes: tidak ada nama undefined (%s)" % (_rep.bad[:3],), not _rep.bad)
+except ImportError:
+    check("pyflakes tidak terpasang, cek statis dilewati", True)
+except Exception as _e:
+    check("pyflakes check jalan: %s" % _e, False)
+
+
 try:
     os.remove(A.STATE_FILE)
 except Exception:

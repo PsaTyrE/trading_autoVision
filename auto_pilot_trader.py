@@ -970,7 +970,7 @@ def manage_open_positions(t):
             if not trade_meta:
                 # entry dari posisi exchange TIDAK boleh 0: kalau 0, gainR jadi 0
                 # dan trailing/SL-lock tidak pernah jalan. Ambil dari pos['entry'].
-                _en = float(entry or p.get("entry") or p.get("entryPrice") or 0)
+                _en = float(entry or pos.get("entry") or pos.get("entryPrice") or 0)
                 if _en <= 0:
                     log(f"POS META skip {symbol}: entry price tidak tersedia - trailing dilewati siklus ini")
                 else:

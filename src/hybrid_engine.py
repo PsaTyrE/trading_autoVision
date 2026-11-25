@@ -386,6 +386,7 @@ class HybridConsensusEngine:
         ai_conf_pct = int(ai_conf * 100)
         ai_reason = ai_signal.primary_reason or "Analisis pola teknikal AI"
 
+        defensive_sl = round(price * (1.0 - config.min_stop_loss_pct), 4) if final_sl <= 0 else max(final_sl, round(price * (1.0 - config.min_stop_loss_pct), 4))
         # --- CASE B0: FOREX FACTORY RED NEWS GUARD (Macro Volatility Protection) ---
         news_guard = snapshot.get("news_guard", {}) if isinstance(snapshot.get("news_guard"), dict) else {}
         if news_guard.get("is_danger"):
@@ -422,7 +423,6 @@ class HybridConsensusEngine:
             reason_str = ", ".join(guardrail_reasons)
             expl = f"[GUARDRAIL AKTIF] AI merekomendasikan LONG ({ai_conf_pct}%), tetapi Quant Math Engine mendeteksi resiko tinggi: {reason_str}. Sistem menolak entry agresif demi melindungi modal."
 
-            defensive_sl = round(price * (1.0 - config.min_stop_loss_pct), 4) if final_sl <= 0 else max(final_sl, round(price * (1.0 - config.min_stop_loss_pct), 4))
             return ConsensusDecision(
                 action="HOLD",
                 status="DEFENSIVE_GRID",
