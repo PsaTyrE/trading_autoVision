@@ -141,8 +141,26 @@ def open_trade(t, ex, sig, dry):
     if qty <= 0:
         log("%s: qty 0 (risk $%.2f / R $%.2f) - lewat" % (sym, risk_usd, r))
         return None
-    msg = ("<b>ENTRY 1D BREAKOUT</b>\n%s\nHarga %.6g | SL %.6g (%.2f%%)\n"
-           "Qty %s | Risk $%.2f (%.0f%%) | R %.6g" % (sym, px, sl, 100 * r / px, qty, risk_usd, 100 * RISK_PCT, r))
+    notional = qty * px
+    margin = notional / 3.0
+    tp_lines = "\n".join("  TP%d %sR -> %.6g (%d%%)" % (i + 1, m, px + r * m, int(wt * 100))
+                         for i, (m, wt) in enumerate(LEGS))
+    msg = ("\U0001f916 <b>AI TRADING BOT - NEW ORDER EXECUTED</b>\n"
+           "Mode: LIVE | Modul: 1D BREAKOUT\n\n"
+           "Symbol: %s\n"
+           "Action: \U0001f7e2 LONG\n"
+           "Entry Price: $%.6g\n"
+           "Stop Loss: $%.6g (%.2f%%)\n"
+           "Take Profit:\n%s\n"
+           "  Runner 10%% (trail 0.75R setelah 2R)\n"
+           "Leverage: 3x (Margin: $%.2f USDT)\n"
+           "Qty: %s | Notional $%.2f\n"
+           "Risk: $%.2f (%.0f%% equity)\n\n"
+           "\U0001f9e0 <b>Rationale:</b>\n"
+           "1D breakout | close %.6g > high20 | vol %.2fx avg20 | close > EMA50\n"
+           "ATR14 %.6g | SL = 2.0xATR | hold maks %d hari"
+           % (sym, px, sl, 100 * r / px, tp_lines, margin, qty, notional,
+              risk_usd, 100 * RISK_PCT, sig["close"], sig["volr"], sig["atr"], HOLD_DAYS))
     if dry:
         log("DRY " + msg.replace("\n", " | "))
         return None
