@@ -2150,7 +2150,8 @@ def maker_shadow(t):
 def foreign_positions(t, st):
     """Posisi terbuka di akun yang tidak tercatat di active_trades bot ini."""
     try:
-        known = set((st.get("active_trades") or {}).keys())
+        # Posisi modul 1D (daily_breakout_state.json) sah, bukan asing.
+        known = set((st.get("active_trades") or {}).keys()) | _db_syms()
         out = []
         for p in get_open_positions(t) or []:
             sym = p.get("symbol")
