@@ -216,11 +216,18 @@ def main():
                  and x["incomeType"] in ("REALIZED_PNL", "COMMISSION", "FUNDING_FEE"))
 
     # R per posisi terbuka: pakai SL dari state (posisi exchange tidak bawa SL)
-    try:
-        stt = json.load(open("autonomous_trader_state.json", encoding="utf-8"))
-        meta = stt.get("active_trades") or {}
-    except Exception:
-        meta = {}
+    meta = {}
+    for _sf, _key in (("autonomous_trader_state.json", "active_trades"),
+                      ("daily_breakout_state.json", None)):
+        try:
+            _d = json.load(open(_sf, encoding="utf-8"))
+        except Exception:
+            continue
+        if _key:
+            meta.update(_d.get(_key) or {})
+        else:
+            # state modul 1D: {sym: rec}
+            meta.update({k: v for k, v in _d.items() if isinstance(v, dict) and "entry" in v})
 
     lines = []
     lines.append("<b>LAPORAN PROFIT</b> - %s WIB" % datetime.now().strftime("%d %b %H:%M"))
