@@ -442,3 +442,36 @@ lebih kecil relatif terhadap SL.
 - Gagal salah satu -> kandidat dicabut permanen, tidak "diperbaiki" dengan ambang lain.
 
 **Catatan:** uji hanya boleh dijalankan setelah entri ini ada di git.
+
+### HASIL UJI #7 (dijalankan 2026-11-28, setelah entri di-commit `a35c0b1`)
+
+Data: 22 koin universe, 1D, n=280 sinyal.
+
+```
+SEMUA (baseline)   n=280  exp +0.147R  WR 58.2%  PF 1.37
+  A <=3%           n= 96  exp +0.205R  WR 60.4%  PF 1.54
+  B 3-6%           n= 77  exp +0.182R  WR 62.3%  PF 1.51
+  C 6-10%          n= 44  exp +0.221R  WR 59.1%  PF 1.61   <- TERBAIK
+  D >10%           n= 63  exp -0.034R  WR 49.2%  PF 0.93   <- SATU-SATUNYA RUSAK
+
+RULE tolak ext>6%  n=173  exp +0.195R  WR 61.3%  PF 1.53
+sinyal tersisa 61.8% (syarat >=60%)  -> LULUS ambang
+delta exp +0.047R (syarat >=+0.020R) -> LULUS ambang
+```
+
+**Verdict: LULUS secara angka, TAPI mekanismenya salah.**
+
+Bucket C (6-10%) justru bucket TERBAIK (+0,221R). Memotong di 6% membuang
+bucket paling produktif; aturan hanya "lulus" karena ikut membuang ekor >10%.
+Hipotesis "ekstensi besar = entry telat = buruk" **FALSE** kecuali di ekor
+ekstrem >10%.
+
+**Keputusan: TIDAK DIPASANG.** Alasan berlapis:
+1. Parameter 1D beku sampai 20 trade closed (baru 1: PIPPIN). Bukan bug fix.
+2. Aturan yang lulus karena alasan yang salah tetap curve-fitting.
+3. Ekor >10% (n=63, exp -0,034R) belum pernah pra-registrasi sendiri;
+   kalau mau dipakai, wajib entri #8 dengan ambang & kriteria baru, sebelum uji.
+
+**Konsekuensi untuk VVV:** ekstensi VVV saat entry 7,9% -> bucket C, bucket
+TERBAIK. Loss VVV bukan bukti "entry di pucuk salah"; itu variance di bucket
+yang secara historis paling profitable. Tidak ada perubahan kode.
