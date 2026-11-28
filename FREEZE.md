@@ -501,3 +501,28 @@ Aturan entry lain tidak diubah.
 **Jika lulus:** rule dipasang sebagai satu kondisi tambahan di `signal()`,
 tanpa menyentuh parameter lain, dan dicatat sebagai perubahan parameter
 setelah review 20 trade (bukan sekarang, kecuali terbukti di dua sisi).
+
+### HASIL UJI #8 (dijalankan 2026-11-28, setelah entri di-commit `05f8e90`)
+
+Split per simbol: 60% bar terlama = IN, 40% terbaru = OUT.
+
+```
+IN-SAMPLE   baseline n=111  exp +0.227R  WR 63.1%
+            rule>10% n= 94  exp +0.263R  WR 64.9%  delta +0.037R   OK
+OUT-SAMPLE  baseline n=169  exp +0.095R  WR 55.0%
+            rule>10% n=123  exp +0.152R  WR 57.7%  delta +0.057R   OK
+
+ekor >10% saja:  IN n=17 exp +0.023R  |  OUT n=46 exp -0.058R
+```
+
+**Verdict: LULUS dua sisi. DIPASANG** sebagai `MAX_EXT = 0.10` di
+`daily_breakout.py`, satu kondisi tambahan di `signal()`. Tidak ada parameter
+lain yang diubah.
+
+Catatan kejujuran: ekor >10% di IN masih +0,023R (tidak negatif), jadi
+mekanisme filter tidak sepenuhnya konsisten antar sisi. Yang konsisten adalah
+"membuang ekor menaikkan expectancy di kedua sisi". Dipasang karena itu yang
+dikunci di kriteria, bukan karena narasinya rapi.
+
+**Rollback:** set `MAX_EXT = 9.99` di kode untuk menonaktifkan (semua breakout
+lolos). Evaluasi ulang setelah 20 trade 1D closed.

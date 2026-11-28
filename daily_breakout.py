@@ -39,6 +39,7 @@ RUNNER = 0.10
 TRAIL_AFTER = 2.0        # R
 TRAIL_DIST = 0.75        # R
 HOLD_DAYS = 20
+MAX_EXT = 0.10           # tolak breakout >10% di atas high20 (FREEZE #8, lulus in+out-of-sample)
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -115,7 +116,13 @@ def signal(ex, sym):
     i = len(c) - 1
     e50 = ema(c, 50)[i]
     av = sum(v[i - 20:i]) / 20
-    if av <= 0 or v[i] < 1.5 * av or c[i] <= max(h[i - 20:i]) or c[i] <= e50:
+    h20 = max(h[i - 20:i])
+    if av <= 0 or v[i] < 1.5 * av or c[i] <= h20 or c[i] <= e50:
+        return None
+    ext = (c[i] - h20) / h20
+    if ext > MAX_EXT:
+        log("%s: VETO ekstensi %.2f%% > %.0f%% (close %.6g high20 %.6g)"
+            % (sym.split("/")[0], 100 * ext, 100 * MAX_EXT, c[i], h20))
         return None
     a = atr14(h, l, c)
     if a <= 0:
