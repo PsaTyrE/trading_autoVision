@@ -475,3 +475,29 @@ ekstrem >10%.
 **Konsekuensi untuk VVV:** ekstensi VVV saat entry 7,9% -> bucket C, bucket
 TERBAIK. Loss VVV bukan bukti "entry di pucuk salah"; itu variance di bucket
 yang secara historis paling profitable. Tidak ada perubahan kode.
+
+## KANDIDAT PRA-REGISTRASI #8 — Tolak Breakout Ekstensi >10% (2026-11-28)
+
+**Status:** KANDIDAT. Ambang & kriteria dikunci SEBELUM uji dijalankan.
+
+**Asal:** hasil uji #7 menunjukkan hanya bucket ekstensi >10% yang rusak
+(n=63, exp -0,034R). Tapi 10% itu ditemukan DARI dataset yang sama.
+Karena itu uji #8 wajib memakai validasi terpisah.
+
+**Rule kandidat:** tolak entry jika (close - high20) / high20 > 0,10.
+Aturan entry lain tidak diubah.
+
+**Protokol validasi (dikunci sekarang):**
+- Data 1D, 22 koin, >= 400 bar.
+- Split waktu: 60% bar terlama = IN-SAMPLE, 40% bar terbaru = OUT-OF-SAMPLE.
+  Split per simbol berdasarkan timestamp bar, bukan per-trade.
+- Ambang 10% TIDAK boleh diubah setelah melihat hasil, di kedua sisi.
+
+**Kriteria lulus (dikunci sekarang):**
+1. IN-SAMPLE: exp rule > exp baseline DAN n_rule >= 50.
+2. OUT-OF-SAMPLE: exp rule > exp baseline DAN n_rule >= 30.
+3. Kedua sisi harus positif. Gagal satu sisi -> dicabut permanen.
+
+**Jika lulus:** rule dipasang sebagai satu kondisi tambahan di `signal()`,
+tanpa menyentuh parameter lain, dan dicatat sebagai perubahan parameter
+setelah review 20 trade (bukan sekarang, kecuali terbukti di dua sisi).
