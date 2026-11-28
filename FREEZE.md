@@ -409,3 +409,36 @@ terbukti (+0,18R) jadi tidak terbaca.
 - Netral (0..+0,05R): tetap 1%, lanjut 20 trade lagi.
 
 **Rollback instan:** `MOM_SLEEVE=0` di `.env`, tanpa ubah kode.
+
+## KANDIDAT PRA-REGISTRASI #7 — Filter Ekstensi Breakout 1D (2026-11-28)
+
+**Status:** KANDIDAT. Belum aktif di kode. Belum ada hasil backtest dihitung
+saat entri ini ditulis — sengaja, supaya ambang tidak dipilih setelah lihat hasil.
+
+**Pemicu:** VVV 26/11 entry close 29.258 = +7,9% di atas high20 27.111,
+lalu turun ke 26.19 (-0,56R). Pertanyaan: apakah entry yang terlalu jauh
+di atas breakout point punya expectancy lebih buruk?
+
+**Hipotesis:** ekstensi besar di atas high20 = entry telat, sisa ruang ke TP
+lebih kecil relatif terhadap SL.
+
+**Ambang diuji (dikunci sekarang):**
+- Ekstensi = (close - high20) / high20
+- Bucket A: ekstensi <= 3%
+- Bucket B: 3% < ekstensi <= 6%
+- Bucket C: 6% < ekstensi <= 10%
+- Bucket D: ekstensi > 10%
+- Rule kandidat: tolak entry jika ekstensi > 6% (bucket C+D)
+
+**Metode uji (dikunci sekarang):**
+- Data 1D Binance, 22 koin UNIVERSE_N, >= 400 bar, 2,5 tahun.
+- Aturan entry dasar TIDAK diubah: close > high20, vol >= 1,5x avg20, close > EMA50.
+- Exit: ladder LEGS=[(1.0,.26),(1.2,.24),(1.4,.22),(1.7,.18)] + runner 10%, trail 0,75R setelah 2R.
+- Fee 0,06% per sisi.
+
+**Kriteria lulus (dikunci sekarang):**
+- Rule harus menaikkan expectancy >= +0,02R DAN tidak menurunkan jumlah sinyal
+  lebih dari 40%.
+- Gagal salah satu -> kandidat dicabut permanen, tidak "diperbaiki" dengan ambang lain.
+
+**Catatan:** uji hanya boleh dijalankan setelah entri ini ada di git.
