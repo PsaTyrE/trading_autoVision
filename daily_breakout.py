@@ -111,7 +111,7 @@ def signal(ex, sym):
     if len(oh) < 60:
         return None
     oh = oh[:-1]                      # buang candle berjalan
-    o = [b[1] for b in oh]; h = [b[2] for b in oh]; l = [b[3] for b in oh]
+    h = [b[2] for b in oh]; l = [b[3] for b in oh]
     c = [b[4] for b in oh]; v = [b[5] for b in oh]
     i = len(c) - 1
     e50 = ema(c, 50)[i]
